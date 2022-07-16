@@ -1,0 +1,37 @@
+name: npm_changelog
+
+on:
+  workflow_call:
+    inputs:
+      lockPath:
+        description: Lock file path.
+        default: "yarn.lock"
+        required: false
+        type: string
+
+jobs:
+  pre_job:
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@9d116fa7e55f295019cfab7e3ab72b478bcf7fdd
+        with:
+          paths: '["**/yarn.lock", "**/package-lock.json", "**/pnpm-lock.yaml"]'
+
+  npm_changelog:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+
+      - uses: kzkn/npm-changelog-url-action@v1
+        with:
+          githubToken: ${{ github.token }}
+          lockPath: ${{ inputs.lockPath }}
+          onlySpecifiedPackages: true
