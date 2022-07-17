@@ -1,0 +1,34 @@
+name: gem_changelog
+
+on:
+  workflow_call:
+    secrets:
+      rubygemsToken:
+        description: A API token of rubygems.org. Required scope is `Index rubygems`.
+        required: true
+
+jobs:
+  pre_job:
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@9d116fa7e55f295019cfab7e3ab72b478bcf7fdd
+        with:
+          paths: '["Gemfile.lock"]'
+
+  gem_changelog:
+    needs: pre_job
+    if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v3
+
+      - uses: kzkn/rubygems-changelog-url-action@v1
+        with:
+          githubToken: ${{ github.token }}
+          rubygemsToken: ${{ secrets.rubygemsToken }}
