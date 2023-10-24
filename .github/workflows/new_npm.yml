@@ -21,7 +21,7 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - uses: hiwelo/new-dependencies-action@e4175e14484328f9ab56df91e420e90ad5031c08
         with:
