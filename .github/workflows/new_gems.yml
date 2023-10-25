@@ -26,6 +26,6 @@ jobs:
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
 
-      - uses: aki77/new-gems-action@v1
+      - uses: aki77/new-gems-action@v2
         with:
           token: ${{ github.token }}
