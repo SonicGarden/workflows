@@ -30,7 +30,7 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v4
 
-      - uses: kzkn/npm-changelog-url-action@v1
+      - uses: kzkn/npm-changelog-url-action@f2009b04e49427c3037a626e8edcce65ef6406df
         with:
           githubToken: ${{ github.token }}
           lockPath: ${{ inputs.lockPath }}
