@@ -1,0 +1,26 @@
+name: copytuner_deploy
+
+on:
+  workflow_call:
+    secrets:
+      apiKey:
+        description: API key for Copytuner.
+        required: true
+
+jobs:
+  copytuner_deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Run deploy
+        env:
+          COPYTUNER_API_KEY: ${{ secrets.apiKey }}
+        run: |
+          bin/rake copy_tuner:deploy
