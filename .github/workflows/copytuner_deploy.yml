@@ -22,5 +22,6 @@ jobs:
       - name: Run deploy
         env:
           COPYTUNER_API_KEY: ${{ secrets.apiKey }}
+          DATABASE_URL: postgresql://postgres@localhost:5432/postgres?encoding=utf8&pool=5&timeout=5000
         run: |
           bin/rake copy_tuner:deploy
