@@ -5,7 +5,7 @@ on:
     secrets:
       rubygemsToken:
         description: A API token of rubygems.org. Required scope is `Index rubygems`.
-        required: true
+        required: false
 
 jobs:
   pre_job:
