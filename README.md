@@ -95,6 +95,32 @@ with:
 
 これらの設定により、CIが全て通過した後に自動的にPRがマージされます。
 
+### 7. claude-review
+Claude Code を使用してPRの自動コードレビューを実行するワークフローです。
+
+**使用方法:**
+```yaml
+uses: SonicGarden/workflows/.github/workflows/claude-review.yml@main
+secrets:
+  claude_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }} # 推奨
+  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # フォールバック
+```
+
+**パラメータ:**
+- `guideline_file`: コードレビューのガイドラインファイルのパス（オプション）
+- `focus_areas`: レビューの重点領域（オプション、デフォルト設定済み）
+- `model`: 使用するClaudeモデル（オプション、デフォルトはSonnet 4）
+
+**必要なシークレット:**
+- `claude_oauth_token`: Claude OAuth トークン（推奨）
+- `anthropic_api_key`: Anthropic API キー（claude_oauth_tokenがない場合のフォールバック）
+
+**機能:**
+- PRの変更内容を日本語で自動レビュー
+- インラインコメントによる具体的な改善提案
+- コード品質、セキュリティ、パフォーマンスなど多角的な観点からのレビュー
+- 既存のClaude botコメントを自動削除して重複を防止
+
 ## 使用例
 
 他のリポジトリからこれらのワークフローを使用する場合は、`.github/workflows/` ディレクトリに以下のようなファイルを作成してください：
