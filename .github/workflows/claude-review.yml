@@ -77,7 +77,7 @@ jobs:
           echo "Checking skip conditions..."
 
           # 既存のClaude Code Reviewがあるかチェック
-          existing_review=$(gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.author.login == "claude[bot]") | .id' | head -1)
+          existing_review=$(gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.author.login == "claude") | .id' | head -1)
 
           if [ -z "$existing_review" ]; then
             echo "should_skip=false" >> $GITHUB_OUTPUT
@@ -86,7 +86,7 @@ jobs:
           fi
 
           # 前回のClaude レビューの実施時点を特定
-          last_review_time=$(gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.author.login == "claude[bot]") | .submittedAt' | sort -r | head -1)
+          last_review_time=$(gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.author.login == "claude") | .submittedAt' | sort -r | head -1)
 
           if [ -z "$last_review_time" ]; then
             echo "should_skip=false" >> $GITHUB_OUTPUT
