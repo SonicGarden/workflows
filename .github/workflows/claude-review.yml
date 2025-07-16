@@ -64,7 +64,7 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
             echo "Proceeding with review"
           fi
-      - uses: aki77/delete-pr-comments-action@main
+      - uses: aki77/delete-pr-comments-action@v3
         if: steps.check-skip.outputs.skip != 'true'
         with:
           token: ${{ github.token }}
