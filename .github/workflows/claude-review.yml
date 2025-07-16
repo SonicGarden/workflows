@@ -50,7 +50,22 @@ jobs:
         with:
           token: ${{ github.token }}
           fetch-depth: 0
+
+      - name: Check for skip review
+        id: check-skip
+        if: github.event_name == 'pull_request'
+        run: |
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          echo "Latest commit message: $COMMIT_MESSAGE"
+          if [[ "$COMMIT_MESSAGE" == *"[skip review]"* ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "Skipping review due to [skip review] in commit message"
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+            echo "Proceeding with review"
+          fi
       - uses: aki77/delete-pr-comments-action@main
+        if: steps.check-skip.outputs.skip != 'true'
         with:
           token: ${{ github.token }}
           usernames: claude[bot]
@@ -59,6 +74,7 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
+        if: steps.check-skip.outputs.skip != 'true'
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.claude_oauth_token }}
