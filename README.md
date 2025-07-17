@@ -110,6 +110,7 @@ secrets:
 - `guideline_file`: コードレビューのガイドラインファイルのパス（オプション）
 - `focus_areas`: レビューの重点領域（オプション、デフォルト設定済み）
 - `model`: 使用するClaudeモデル（オプション、デフォルトはSonnet 4）
+- `minimum_changed_lines`: 前回レビューからの最小変更行数（デフォルト: 0、0の場合は常に実行）
 
 **必要なシークレット:**
 - `claude_oauth_token`: Claude OAuth トークン（推奨）

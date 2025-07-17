@@ -26,6 +26,11 @@ on:
         required: false
         type: string
         default: ''
+      minimum_changed_lines:
+        description: 'Minimum number of changed lines since last review to trigger review (0 means always run)'
+        required: false
+        type: number
+        default: 0
     secrets:
       claude_oauth_token:
         required: false
@@ -51,8 +56,8 @@ jobs:
           token: ${{ github.token }}
           fetch-depth: 0
 
-      - name: Check for skip review
-        id: check-skip
+      - name: Check for skip review message
+        id: check-skip-message
         if: github.event_name == 'pull_request'
         run: |
           COMMIT_MESSAGE=$(git log -1 --pretty=%B)
@@ -64,8 +69,62 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
             echo "Proceeding with review"
           fi
-      - uses: aki77/delete-pr-comments-action@main
-        if: steps.check-skip.outputs.skip != 'true'
+
+      - name: Check minimum changed lines since last review
+        id: check-minimum-lines
+        if: github.event_name == 'pull_request' && steps.check-skip-message.outputs.skip != 'true' && ${{ inputs.minimum_changed_lines }} != 0
+        run: |
+          echo "Checking skip conditions..."
+
+          # 既存のClaude Code Reviewがあるかチェック
+          claude_reviews=$(gh pr view ${{ github.event.pull_request.number }} --json reviews --jq '.reviews[] | select(.author.login == "claude")')
+          existing_review=$(echo "$claude_reviews" | jq -r '.id' | head -1)
+
+          if [ -z "$existing_review" ]; then
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=No existing claude review found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 前回のClaude レビューの実施時点を特定
+          last_review_time=$(echo "$claude_reviews" | jq -r '.submittedAt' | sort -r | head -1)
+
+          if [ -z "$last_review_time" ]; then
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=No previous claude review found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # 前回レビュー時点に最も近いコミットを特定
+          last_review_commit=$(git log --until="$last_review_time" --format="%H" -1 2>/dev/null || echo "")
+
+          if [ -z "$last_review_commit" ]; then
+            # フォールバック: 前回レビュー時点のコミットが見つからない場合はPR全体の変更行数を使用
+            echo "Warning: Failed to find last review commit. Using entire PR diff for line count calculation."
+            changed_lines=$(gh pr diff ${{ github.event.pull_request.number }} --numstat | awk '{sum+=$1+$2} END {print sum+0}')
+          else
+            # 前回レビュー時点から現在までの正確な差分行数を計算
+            changed_lines=$(git diff --numstat "$last_review_commit"..HEAD 2>/dev/null | awk '{sum+=$1+$2} END {print sum+0}')
+
+            # git diffでエラーが発生した場合はフォールバック
+            if [ $? -ne 0 ] || [ -z "$changed_lines" ]; then
+              echo "Warning: git diff failed or returned empty result. Using entire PR diff for line count calculation."
+              changed_lines=$(gh pr diff ${{ github.event.pull_request.number }} --numstat | awk '{sum+=$1+$2} END {print sum+0}')
+            fi
+          fi
+
+          if [ "$changed_lines" -le "${{ inputs.minimum_changed_lines }}" ]; then
+            echo "should_skip=true" >> $GITHUB_OUTPUT
+            echo "skip_reason=Changed lines ($changed_lines) is below minimum (${{ inputs.minimum_changed_lines }})" >> $GITHUB_OUTPUT
+          else
+            echo "should_skip=false" >> $GITHUB_OUTPUT
+            echo "skip_reason=Changed lines ($changed_lines) exceeds minimum (${{ inputs.minimum_changed_lines }})" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - uses: aki77/delete-pr-comments-action@v3
+        if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
         with:
           token: ${{ github.token }}
           usernames: claude[bot]
@@ -74,7 +133,7 @@ jobs:
 
       - name: Run Claude Code Review
         id: claude-review
-        if: steps.check-skip.outputs.skip != 'true'
+        if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
         uses: anthropics/claude-code-action@beta
         with:
           claude_code_oauth_token: ${{ secrets.claude_oauth_token }}
