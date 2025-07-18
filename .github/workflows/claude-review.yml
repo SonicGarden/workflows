@@ -88,6 +88,7 @@ jobs:
 
           # 前回のClaude レビューの実施時点を特定
           last_review_time=$(echo "$claude_reviews" | jq -r '.submittedAt' | sort -r | head -1)
+          echo "Last review time: $last_review_time"
 
           if [ -z "$last_review_time" ]; then
             echo "should_skip=false" >> $GITHUB_OUTPUT
@@ -97,6 +98,7 @@ jobs:
 
           # 前回レビュー時点に最も近いコミットを特定
           last_review_commit=$(git log --until="$last_review_time" --format="%H" -1 2>/dev/null || echo "")
+          echo "Last review commit: $last_review_commit"
 
           if [ -z "$last_review_commit" ]; then
             # フォールバック: 前回レビュー時点のコミットが見つからない場合はPR全体の変更行数を使用
