@@ -1,6 +1,16 @@
 # workflows
 Reusable GitHub Actions workflows
 
+## ワークフロー一覧
+
+- [copytuner_deploy](#1-copytuner_deploy) - Copytuner翻訳管理ツールへのデプロイ
+- [gem_changelog](#2-gem_changelog) - Gemfile.lockの変更検出とchangelog投稿
+- [new_gems](#3-new_gems) - 新規追加gemの検出とコメント投稿
+- [new_npm](#4-new_npm) - 新規追加npmパッケージの検出とコメント投稿
+- [npm_changelog](#5-npm_changelog) - npm/yarnロックファイルの変更検出とchangelog投稿
+- [staging_deploy](#6-staging_deploy) - staging環境への自動デプロイPR作成
+- [claude-review](#7-claude-review) - Claude Codeによる自動コードレビュー
+
 ## 利用可能なワークフロー
 
 ### 1. copytuner_deploy
@@ -43,7 +53,12 @@ package.jsonの変更を検出し、新しく追加されたnpmパッケージ�
 **使用方法:**
 ```yaml
 uses: SonicGarden/workflows/.github/workflows/new_npm.yml@main
+with:
+  runs_on: "linux-arm64-default" # オプション、デフォルトは "linux-arm64-default"
 ```
+
+**パラメータ:**
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
 
 ### 5. npm_changelog
 npm/yarnのロックファイルの変更を検出し、更新されたパッケージのchangelogをPRコメントに投稿するワークフローです。
@@ -53,10 +68,12 @@ npm/yarnのロックファイルの変更を検出し、更新されたパッケ
 uses: SonicGarden/workflows/.github/workflows/npm_changelog.yml@main
 with:
   lockPath: "yarn.lock" # オプション、デフォルトは "yarn.lock"
+  runs_on: "linux-arm64-default" # オプション、デフォルトは "linux-arm64-default"
 ```
 
 **パラメータ:**
 - `lockPath`: ロックファイルのパス（デフォルト: `yarn.lock`）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
 
 ### 6. staging_deploy
 指定されたブランチから staging ブランチへの自動デプロイPRを作成・管理するワークフローです。
@@ -67,11 +84,13 @@ uses: SonicGarden/workflows/.github/workflows/staging_deploy.yml@main
 with:
   source_branch: "release-candidate" # オプション、デフォルトは "release-candidate"
   target_branch: "staging" # オプション、デフォルトは "staging"
+  runs_on: "linux-arm64-default" # オプション、デフォルトは "linux-arm64-default"
 ```
 
 **パラメータ:**
 - `source_branch`: デプロイ元のブランチ名（デフォルト: `release-candidate`）
 - `target_branch`: デプロイ先のブランチ名（デフォルト: `staging`）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
 
 **機能:**
 - 既存のPRがあるかをチェック
@@ -111,6 +130,7 @@ secrets:
 - `focus_areas`: レビューの重点領域（オプション、デフォルト設定済み）
 - `model`: 使用するClaudeモデル（オプション、デフォルトはSonnet 4）
 - `minimum_changed_lines`: 前回レビューからの最小変更行数（デフォルト: 0、0の場合は常に実行）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
 
 **必要なシークレット:**
 - `claude_oauth_token`: Claude OAuth トークン（推奨）

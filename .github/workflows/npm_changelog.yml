@@ -8,10 +8,15 @@ on:
         default: "yarn.lock"
         required: false
         type: string
+      runs_on:
+        description: 'GitHub Actions runner to use'
+        required: false
+        type: string
+        default: 'linux-arm64-default'
 
 jobs:
   pre_job:
-    runs-on: linux-arm64-default
+    runs-on: ${{ inputs.runs_on }}
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -23,7 +28,7 @@ jobs:
   npm_changelog:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
-    runs-on: linux-arm64-default
+    runs-on: ${{ inputs.runs_on }}
     timeout-minutes: 10
 
     steps:
