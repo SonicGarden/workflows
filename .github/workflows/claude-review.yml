@@ -31,6 +31,11 @@ on:
         required: false
         type: number
         default: 0
+      runs_on:
+        description: 'GitHub Actions runner to use'
+        required: false
+        type: string
+        default: 'linux-arm64-default'
     secrets:
       claude_oauth_token:
         required: false
@@ -41,7 +46,7 @@ on:
 
 jobs:
   claude-review:
-    runs-on: linux-arm64-default
+    runs-on: ${{ inputs.runs_on }}
     timeout-minutes: 30
     permissions:
       contents: read

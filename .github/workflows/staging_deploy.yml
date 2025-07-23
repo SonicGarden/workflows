@@ -13,6 +13,11 @@ on:
         required: false
         default: 'staging'
         type: string
+      runs_on:
+        description: 'GitHub Actions runner to use'
+        required: false
+        type: string
+        default: 'linux-arm64-default'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,7 +25,7 @@ concurrency:
 
 jobs:
   create-staging-pr:
-    runs-on: linux-arm64-default
+    runs-on: ${{ inputs.runs_on }}
     if: contains(github.event.head_commit.message, '[skip deploy]') == false
     permissions:
       contents: write
@@ -134,7 +139,7 @@ jobs:
 
   # NOTE: デプロイ後の通知ジョブ（オプション）
   notify-deployment:
-    runs-on: linux-arm64-default
+    runs-on: ${{ inputs.runs_on }}
     needs: create-staging-pr
     if: always()
     steps:
