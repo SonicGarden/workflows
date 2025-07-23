@@ -148,6 +148,9 @@ jobs:
           anthropic_api_key: ${{ secrets.claude_oauth_token != '' && '' || secrets.anthropic_api_key }}
           model: ${{ inputs.model }}
 
+          # NOTE: コードレビュー時に他のコメントに影響されないようにするため
+          trigger_phrase: ''
+
           # Direct prompt for automated review (no @claude mention needed)
           direct_prompt: |
             ${{ inputs.guideline_file != '' && format('`{0}`のガイドラインに従ってPRレビューを実施してください。', inputs.guideline_file) || 'PRレビューを実施してください。' }}
