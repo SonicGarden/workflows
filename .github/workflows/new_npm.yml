@@ -5,7 +5,7 @@ on:
 
 jobs:
   pre_job:
-    runs-on: ubuntu-latest
+    runs-on: linux-arm64-default
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
@@ -17,7 +17,7 @@ jobs:
   new_npm:
     needs: pre_job
     if: ${{ needs.pre_job.outputs.should_skip != 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: linux-arm64-default
     timeout-minutes: 10
 
     steps:
