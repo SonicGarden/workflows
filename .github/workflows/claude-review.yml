@@ -160,7 +160,7 @@ jobs:
             **レビュー手順:**
             1. `mcp__github__create_pending_pull_request_review`でレビュー開始
             2. `mcp__github__get_pull_request_diff`で変更内容と行番号を確認
-            3. `mcp__github__add_pull_request_review_comment_to_pending_review`で具体的なフィードバックをインライン追加
+            3. `mcp__github__add_comment_to_pending_review`で具体的なフィードバックをインライン追加
             4. `mcp__github__submit_pending_pull_request_review`でイベントタイプ"COMMENT"として送信
 
             **重点領域:**
@@ -169,4 +169,4 @@ jobs:
             建設的で具体的な改善提案を行い、行固有の問題にはインラインコメント、全体総括はレビュー送信時に含めてください。
 
           use_sticky_comment: true
-          allowed_tools: "mcp__github__create_pending_pull_request_review,mcp__github__add_pull_request_review_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__get_pull_request_diff"
+          allowed_tools: "mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__get_pull_request_diff"
