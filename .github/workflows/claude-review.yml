@@ -142,7 +142,7 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
-        uses: anthropics/claude-code-action@beta
+        uses: anthropics/claude-code-action@v0.0.48
         with:
           claude_code_oauth_token: ${{ secrets.claude_oauth_token }}
           anthropic_api_key: ${{ secrets.claude_oauth_token != '' && '' || secrets.anthropic_api_key }}
