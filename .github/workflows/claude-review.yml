@@ -191,3 +191,12 @@ jobs:
             mcp__github__get_pull_request_diff
             mcp__context7__resolve-library-id
             mcp__context7__get-library-docs
+          mcp_config: |
+            {
+              "mcpServers": {
+                "context7": {
+                  "type": "sse",
+                  "url": "https://mcp.context7.com/sse"
+                }
+              }
+            }
