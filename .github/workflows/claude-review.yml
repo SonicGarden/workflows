@@ -162,6 +162,8 @@ jobs:
             2. `mcp__github__get_pull_request_diff`で変更内容と行番号を確認
             3. `mcp__github__add_comment_to_pending_review`で具体的なフィードバックをインライン追加
                - **重要**: コード修正の提案を行う場合は、必ずGitHubのsuggestion機能を使用してください
+               - 単一行の修正: lineパラメータのみ指定
+               - 複数行の修正: startLineとlineパラメータを指定して範囲を指定
                - コメント内で修正案を示す際は、```suggestion と ``` で囲んでください
             4. `mcp__github__submit_pending_pull_request_review`でイベントタイプ"COMMENT"として送信
 
@@ -172,10 +174,19 @@ jobs:
 
             **補足: suggestion機能の使用について**
             コード修正を提案する際は、開発者が簡単に変更を適用できるよう、GitHubのsuggestion機能を積極的に活用してください。
-            例：
+            
+            単一行の例：
             ```suggestion
             改善されたコード行をここに記述
             ```
+            
+            複数行の例（startLineとlineで範囲指定）：
+            ```suggestion
+            改善された複数行の
+            コードをここに
+            記述します
+            ```
+            
             これにより、開発者は「Commit suggestion」ボタンをクリックするだけで提案を適用できます。
 
           use_sticky_comment: true
