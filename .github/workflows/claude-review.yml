@@ -157,6 +157,11 @@ jobs:
 
             **重要: すべてのフィードバックとコメントは日本語で提供してください。**
 
+            **API検証ルール:**
+            - フレームワークやライブラリのAPIについて指摘する際は、必ず事前にcontext7 MCPツール（`mcp__context7__resolve-library-id`と`mcp__context7__get-library-docs`）を使用して正確性を検証してください
+            - 検証できない場合は、推測に基づく指摘を避け、確認可能な事実のみをレビューコメントに含めてください
+            - これにより、誤った情報（ハルシネーション）によるレビューを防止します
+
             **レビュー手順:**
             1. `mcp__github__create_pending_pull_request_review`でレビュー開始
             2. `mcp__github__get_pull_request_diff`で変更内容と行番号を確認
@@ -190,4 +195,19 @@ jobs:
             これにより、開発者は「Commit suggestion」ボタンをクリックするだけで提案を適用できます。
 
           use_sticky_comment: true
-          allowed_tools: "mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__get_pull_request_diff"
+          allowed_tools: |
+            mcp__github__create_pending_pull_request_review
+            mcp__github__add_comment_to_pending_review
+            mcp__github__submit_pending_pull_request_review
+            mcp__github__get_pull_request_diff
+            mcp__context7__resolve-library-id
+            mcp__context7__get-library-docs
+          mcp_config: |
+            {
+              "mcpServers": {
+                "context7": {
+                  "type": "sse",
+                  "url": "https://mcp.context7.com/sse"
+                }
+              }
+            }
