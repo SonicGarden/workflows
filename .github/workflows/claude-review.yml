@@ -157,6 +157,11 @@ jobs:
 
             **重要: すべてのフィードバックとコメントは日本語で提供してください。**
 
+            **レビューの基本原則:**
+            - このPRの現在の状態（最新のコミット）に基づいてレビューしてください
+            - diffに表示される変更内容を適切に解釈し、現在のコードの問題を指摘してください
+            - 既に存在しないコードや、過去のコミットで修正済みの内容については指摘しないでください
+
             **API検証ルール:**
             - フレームワークやライブラリのAPIについて指摘する際は、必ず事前にcontext7 MCPツール（`mcp__context7__resolve-library-id`と`mcp__context7__get-library-docs`）を使用して正確性を検証してください
             - 検証できない場合は、推測に基づく指摘を避け、確認可能な事実のみをレビューコメントに含めてください
@@ -164,13 +169,62 @@ jobs:
 
             **レビュー手順:**
             1. `mcp__github__create_pending_pull_request_review`でレビュー開始
-            2. `mcp__github__get_pull_request_diff`で変更内容と行番号を確認
-            3. `mcp__github__add_comment_to_pending_review`で具体的なフィードバックをインライン追加
+            2. `mcp__github__get_pull_request_files`で現在のPRに含まれるファイル一覧を取得
+            3. `mcp__github__get_pull_request_diff`で変更内容を確認
+            4. 変更されたファイルについては、実際のファイル（チェックアウト済み）を読み込んで正確な行番号を確認
+            5. `mcp__github__add_comment_to_pending_review`で具体的なフィードバックをインライン追加
+               - **重要**: ファイルが現在のPRに存在することを確認してからコメントを追加
+               - **重要**: diffの行番号ではなく、実際のファイルの行番号を使用すること
+               - 存在するファイルの最新状態に基づいてレビュー
                - **重要**: コード修正の提案を行う場合は、必ずGitHubのsuggestion機能を使用してください
-               - 単一行の修正: lineパラメータのみ指定
-               - 複数行の修正: startLineとlineパラメータを指定して範囲を指定
+
+               **APIパラメータの指定方法:**
+               - 単一行の修正:
+                 - `line`: 対象行番号（必須）
+                 - `subjectType`: "LINE"
+                 - `body`: "修正提案\n```suggestion\n改善されたコード\n```"
+
+               - 複数行の修正（範囲指定）:
+                 - `startLine`: コメント対象範囲の開始行番号（必須）
+                 - `line`: コメント対象範囲の終了行番号（必須、startLine以上の値）
+                 - `startSide`: "RIGHT"（追加された行の場合）
+                 - `side`: "RIGHT"（追加された行の場合）
+                 - `subjectType`: "LINE"
+                 - `body`: "修正提案\n```suggestion\n置き換え後のコード（行数は自由）\n```"
+
+               - **重要**:
+                 - 複数行をコメント対象とする場合は`startLine`と`line`の両方を必ず指定
+                 - `startLine`から`line`までの範囲がハイライトされ、その範囲全体がsuggestionの内容で置き換えられる
+                 - suggestionの行数は元の範囲と異なっても問題ない（削除や追加が可能）
                - コメント内で修正案を示す際は、```suggestion と ``` で囲んでください
-            4. `mcp__github__submit_pending_pull_request_review`でイベントタイプ"COMMENT"として送信
+            6. `mcp__github__submit_pending_pull_request_review`でイベントタイプ"COMMENT"として送信
+
+            **重要な制約:**
+            - **削除された行（`-`）自体には直接コメントできない**（GitHub APIの制約）
+            - 削除に関する指摘は、その削除箇所の近くの有効な行にコメントする
+            - ファイルが完全に削除された場合は、PRレビューの総評でコメント
+            - **既に存在しないコード**（過去のコミットで追加→削除されたもの）への指摘は避ける
+
+            **レビューコメントの種類と配置:**
+
+            1. **追加コードの問題**（`+`の行にコメント）:
+               - 「ユーザー入力をエスケープ処理せずに使用しています。セキュリティリスクがあります」
+               - 「このメソッドにエラーハンドリングを追加してください」
+
+            2. **削除による問題**（削除箇所付近の有効な行にコメント）:
+               - 「上記で入力検証が削除されていますが、セキュリティ上必要です」
+               - 「重要なエラーハンドリングが削除されているようです。意図的な削除でしょうか？」
+
+            3. **避けるべきコメント**:
+               - 既に存在しないメソッドへの指摘
+               - 過去のコミットで修正済みの内容の繰り返し
+               - 現在のコードに反映されていない古い状態への指摘
+
+            **削除コードのレビュー基準:**
+            - セキュリティ対策（sanitize、エスケープ処理など）の削除は要確認
+            - エラーハンドリングやバリデーションの削除は要確認
+            - テストコードの削除は、対応する機能削除と整合性があるか確認
+            - 単なるリファクタリングや不要コードの削除は問題なし
 
             **重点領域:**
             ${{ inputs.focus_areas }}
@@ -179,19 +233,19 @@ jobs:
 
             **補足: suggestion機能の使用について**
             コード修正を提案する際は、開発者が簡単に変更を適用できるよう、GitHubのsuggestion機能を積極的に活用してください。
-            
+
             単一行の例：
             ```suggestion
             改善されたコード行をここに記述
             ```
-            
+
             複数行の例（startLineとlineで範囲指定）：
             ```suggestion
             改善された複数行の
             コードをここに
             記述します
             ```
-            
+
             これにより、開発者は「Commit suggestion」ボタンをクリックするだけで提案を適用できます。
 
           use_sticky_comment: true
@@ -200,6 +254,7 @@ jobs:
             mcp__github__add_comment_to_pending_review
             mcp__github__submit_pending_pull_request_review
             mcp__github__get_pull_request_diff
+            mcp__github__get_pull_request_files
             mcp__context7__resolve-library-id
             mcp__context7__get-library-docs
           mcp_config: |
