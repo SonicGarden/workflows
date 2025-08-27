@@ -142,17 +142,15 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
-        uses: anthropics/claude-code-action@beta
+        uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.claude_oauth_token }}
           anthropic_api_key: ${{ secrets.claude_oauth_token != '' && '' || secrets.anthropic_api_key }}
-          model: ${{ inputs.model }}
-
-          # NOTE: コードレビュー時に他のコメントに影響されないようにするため
-          trigger_phrase: ''
 
           # Direct prompt for automated review (no @claude mention needed)
-          direct_prompt: |
+          prompt: |
+            ${{ (github.event.pull_request.number || github.event.issue.number) && format('**重要: このPR番号は {0} です。**', github.event.pull_request.number || github.event.issue.number) || '' }}
+
             ${{ inputs.guideline_file != '' && format('`{0}`のガイドラインに従ってPRレビューを実施してください。', inputs.guideline_file) || 'PRレビューを実施してください。' }}
 
             **重要: すべてのフィードバックとコメントは日本語で提供してください。**
@@ -249,20 +247,14 @@ jobs:
             これにより、開発者は「Commit suggestion」ボタンをクリックするだけで提案を適用できます。
 
           use_sticky_comment: true
-          allowed_tools: |
-            mcp__github__create_pending_pull_request_review
-            mcp__github__add_comment_to_pending_review
-            mcp__github__submit_pending_pull_request_review
-            mcp__github__get_pull_request_diff
-            mcp__github__get_pull_request_files
-            mcp__context7__resolve-library-id
-            mcp__context7__get-library-docs
-          mcp_config: |
-            {
-              "mcpServers": {
-                "context7": {
-                  "type": "sse",
-                  "url": "https://mcp.context7.com/sse"
-                }
-              }
-            }
+          claude_args: |
+            ${{ inputs.model != '' && format('--model {0}', inputs.model) || '' }}
+            --allowedTools
+              mcp__github__create_pending_pull_request_review,
+              mcp__github__add_comment_to_pending_review,
+              mcp__github__submit_pending_pull_request_review,
+              mcp__github__get_pull_request_diff,
+              mcp__github__get_pull_request_files,
+              mcp__context7__resolve-library-id,
+              mcp__context7__get-library-docs
+            --mcp-config '{"mcpServers": {"context7": {"type": "sse", "url": "https://mcp.context7.com/sse"}}}'
