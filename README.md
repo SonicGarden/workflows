@@ -120,14 +120,19 @@ Claude Code を使用してPRの自動コードレビューを実行するワー
 **使用方法:**
 ```yaml
 uses: SonicGarden/workflows/.github/workflows/claude-review.yml@main
+with:
+  guideline_files: |
+    doc/agent/code-review.md
+    doc/agent/code-review-rails.md
+  minimum_changed_lines: 10
 secrets:
-  claude_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }} # 推奨
-  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # フォールバック
+  # 以下どちらかが必須
+  claude_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 **パラメータ:**
-- `guideline_file`: コードレビューのガイドラインファイルのパス（オプション）
-- `focus_areas`: レビューの重点領域（オプション、デフォルト設定済み）
+- `guideline_files`: コードレビューのガイドラインファイルのパス一覧（改行区切り）
 - `model`: 使用するClaudeモデル（オプション、デフォルトはSonnet 4）
 - `minimum_changed_lines`: 前回レビューからの最小変更行数（デフォルト: 0、0の場合は常に実行）
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）

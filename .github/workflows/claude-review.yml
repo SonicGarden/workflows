@@ -3,24 +3,10 @@ name: Claude Code Review
 on:
   workflow_call:
     inputs:
-      guideline_file:
-        description: 'Path to the guideline file for code review'
-        required: false
+      guideline_files:
+        description: 'Paths to guideline files for code review (newline-separated)'
+        required: true
         type: string
-        default: ''
-      focus_areas:
-        description: 'Focus areas for code review'
-        required: false
-        type: string
-        default: |
-          - コード品質とベストプラクティス
-          - 潜在的なバグや問題
-          - パフォーマンスと効率性
-          - セキュリティ（認証・認可・入力検証）
-          - テストカバレッジと品質
-          - データ整合性とエラーハンドリング
-          - アーキテクチャとコンポーネント分離
-          - 命名規則とコードの明確性
       model:
         description: 'Claude model to use (empty for default Sonnet 4)'
         required: false
@@ -139,6 +125,31 @@ jobs:
           noReply: "true"
           includeOverallReviewComments: "true"
 
+      - name: Read guideline files
+        id: read-guideline
+        if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
+        run: |
+          echo "guideline_content<<EOF" >> $GITHUB_OUTPUT
+
+          # Process each guideline file (newline-separated)
+          echo "${{ inputs.guideline_files }}" | while IFS= read -r guideline_file; do
+            # Skip empty lines
+            if [ -z "$guideline_file" ]; then
+              continue
+            fi
+
+            if [ -f "$guideline_file" ]; then
+              echo "Reading guideline file: $guideline_file"
+              cat "$guideline_file" >> $GITHUB_OUTPUT
+              echo "" >> $GITHUB_OUTPUT  # Add newline between files
+            else
+              echo "Warning: Guideline file not found: $guideline_file" >&2
+            fi
+          done
+
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Guideline files processed"
+
       - name: Run Claude Code Review
         id: claude-review
         if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
@@ -151,7 +162,11 @@ jobs:
           prompt: |
             ${{ (github.event.pull_request.number || github.event.issue.number) && format('**重要: このPR番号は {0} です。**', github.event.pull_request.number || github.event.issue.number) || '' }}
 
-            ${{ inputs.guideline_file != '' && format('`{0}`のガイドラインに従ってPRレビューを実施してください。', inputs.guideline_file) || 'PRレビューを実施してください。' }}
+            ${{ steps.read-guideline.outputs.guideline_content }}
+
+            # レビュー実施指示
+
+            PRレビューを実施してください。
 
             **重要: すべてのフィードバックとコメントは日本語で提供してください。**
 
@@ -223,9 +238,6 @@ jobs:
             - エラーハンドリングやバリデーションの削除は要確認
             - テストコードの削除は、対応する機能削除と整合性があるか確認
             - 単なるリファクタリングや不要コードの削除は問題なし
-
-            **重点領域:**
-            ${{ inputs.focus_areas }}
 
             建設的で具体的な改善提案を行い、行固有の問題にはインラインコメント、全体総括はレビュー送信時に含めてください。
 
