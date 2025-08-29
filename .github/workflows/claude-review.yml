@@ -127,7 +127,7 @@ jobs:
 
       - name: Read guideline files
         id: read-guideline
-        if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true' && inputs.guideline_files != ''
+        if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
         run: |
           echo "guideline_content<<EOF" >> $GITHUB_OUTPUT
 
