@@ -164,7 +164,8 @@ jobs:
 
           # Direct prompt for automated review (no @claude mention needed)
           prompt: |
-            ${{ (github.event.pull_request.number || github.event.issue.number) && format('**重要: このPR番号は {0} です。**', github.event.pull_request.number || github.event.issue.number) || '' }}
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
 
             ${{ steps.read-guideline.outputs.guideline_content }}
 
@@ -265,12 +266,5 @@ jobs:
           use_sticky_comment: true
           claude_args: |
             ${{ inputs.model != '' && format('--model {0}', inputs.model) || '' }}
-            --allowedTools
-              mcp__github__create_pending_pull_request_review,
-              mcp__github__add_comment_to_pending_review,
-              mcp__github__submit_pending_pull_request_review,
-              mcp__github__get_pull_request_diff,
-              mcp__github__get_pull_request_files,
-              mcp__context7__resolve-library-id,
-              mcp__context7__get-library-docs
+            --allowedTools "mcp__github_comment__update_claude_comment,mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__context7__resolve-library-id,mcp__context7__get-library-docs"
             --mcp-config '{"mcpServers": {"context7": {"type": "sse", "url": "https://mcp.context7.com/sse"}}}'
