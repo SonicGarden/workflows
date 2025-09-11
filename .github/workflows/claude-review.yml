@@ -127,7 +127,7 @@ jobs:
           includeOverallReviewComments: "true"
 
       - name: Get existing Claude comments
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const query = `query($owner: String!, $repo: String!, $number: Int!) {
