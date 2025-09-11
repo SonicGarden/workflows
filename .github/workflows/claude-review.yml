@@ -51,7 +51,7 @@ jobs:
         id: check-skip-message
         if: github.event_name == 'pull_request'
         run: |
-          COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          COMMIT_MESSAGE=$(git log -1 --pretty=%B ${{ github.event.pull_request.head.sha }})
           echo "Latest commit message: $COMMIT_MESSAGE"
           if [[ "$COMMIT_MESSAGE" == *"[skip review]"* ]]; then
             echo "skip=true" >> $GITHUB_OUTPUT
