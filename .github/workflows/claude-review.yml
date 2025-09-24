@@ -224,6 +224,7 @@ jobs:
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+            TODAY: ${{ github.event.pull_request.updated_at || github.event.issue.updated_at }}
 
             ${{ steps.read-guideline.outputs.guideline_content }}
 
