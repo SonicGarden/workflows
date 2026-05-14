@@ -63,7 +63,7 @@ jobs:
 
       - name: Check minimum changed lines since last review
         id: check-minimum-lines
-        if: github.event_name == 'pull_request' && steps.check-skip-message.outputs.skip != 'true' && ${{ inputs.minimum_changed_lines }} != 0
+        if: github.event_name == 'pull_request' && steps.check-skip-message.outputs.skip != 'true' && inputs.minimum_changed_lines != 0
         continue-on-error: true
         run: |
           echo "Checking skip conditions..."
