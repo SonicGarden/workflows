@@ -133,7 +133,7 @@ secrets:
 
 **パラメータ:**
 - `guideline_files`: コードレビューのガイドラインファイルのパス一覧（改行区切り）
-- `model`: 使用するClaudeモデル（オプション、デフォルトはSonnet 4）
+- `model`: 使用するClaudeモデル（オプション、デフォルトは `sonnet`。空文字を明示指定するとアクション側のデフォルトになる）
 - `minimum_changed_lines`: 前回レビューからの最小変更行数（デフォルト: 0、0の場合は常に実行）
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
 

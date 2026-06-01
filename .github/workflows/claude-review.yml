@@ -8,10 +8,10 @@ on:
         required: true
         type: string
       model:
-        description: 'Claude model to use (empty for default Sonnet 4)'
+        description: 'Claude model to use (default: sonnet; empty string falls back to the action default)'
         required: false
         type: string
-        default: ''
+        default: 'sonnet'
       minimum_changed_lines:
         description: 'Minimum number of changed lines since last review to trigger review (0 means always run)'
         required: false
