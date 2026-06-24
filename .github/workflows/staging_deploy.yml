@@ -4,20 +4,20 @@ on:
   workflow_call:
     inputs:
       source_branch:
-        description: 'デプロイ元のブランチ名'
+        description: "デプロイ元のブランチ名"
         required: false
-        default: 'release-candidate'
+        default: "release-candidate"
         type: string
       target_branch:
-        description: 'デプロイ先のブランチ名'
+        description: "デプロイ先のブランチ名"
         required: false
-        default: 'staging'
+        default: "staging"
         type: string
       runs_on:
-        description: 'GitHub Actions runner to use'
+        description: "GitHub Actions runner to use"
         required: false
         type: string
-        default: 'linux-arm64-default'
+        default: "ubuntu-slim"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
