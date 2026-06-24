@@ -4,10 +4,10 @@ on:
   workflow_call:
     inputs:
       runs_on:
-        description: 'GitHub Actions runner to use'
+        description: "GitHub Actions runner to use"
         required: false
         type: string
-        default: 'linux-arm64-default'
+        default: "ubuntu-slim"
 
 jobs:
   pre_job:

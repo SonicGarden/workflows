@@ -4,24 +4,24 @@ on:
   workflow_call:
     inputs:
       guideline_files:
-        description: 'Paths to guideline files for code review (newline-separated)'
+        description: "Paths to guideline files for code review (newline-separated)"
         required: true
         type: string
       model:
-        description: 'Claude model to use (default: sonnet; empty string falls back to the action default)'
+        description: "Claude model to use (default: sonnet; empty string falls back to the action default)"
         required: false
         type: string
-        default: 'sonnet'
+        default: "sonnet"
       minimum_changed_lines:
-        description: 'Minimum number of changed lines since last review to trigger review (0 means always run)'
+        description: "Minimum number of changed lines since last review to trigger review (0 means always run)"
         required: false
         type: number
         default: 0
       runs_on:
-        description: 'GitHub Actions runner to use'
+        description: "GitHub Actions runner to use"
         required: false
         type: string
-        default: 'linux-arm64-default'
+        default: "ubuntu-24.04-arm"
     secrets:
       claude_oauth_token:
         required: false
@@ -123,7 +123,7 @@ jobs:
           token: ${{ github.token }}
           usernames: claude[bot]
           noReply: "true"
-          onlyNotMinimized: 'true'
+          onlyNotMinimized: "true"
           includeOverallReviewComments: "true"
 
       - name: Get existing Claude comments
