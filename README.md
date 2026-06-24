@@ -54,11 +54,11 @@ package.jsonの変更を検出し、新しく追加されたnpmパッケージ�
 ```yaml
 uses: SonicGarden/workflows/.github/workflows/new_npm.yml@main
 with:
-  runs_on: "linux-arm64-default" # オプション、デフォルトは "linux-arm64-default"
+  runs_on: "ubuntu-slim" # オプション、デフォルトは "ubuntu-slim"
 ```
 
 **パラメータ:**
-- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
 
 ### 5. npm_changelog
 npm/yarnのロックファイルの変更を検出し、更新されたパッケージのchangelogをPRコメントに投稿するワークフローです。
@@ -68,12 +68,12 @@ npm/yarnのロックファイルの変更を検出し、更新されたパッケ
 uses: SonicGarden/workflows/.github/workflows/npm_changelog.yml@main
 with:
   lockPath: "yarn.lock" # オプション、デフォルトは "yarn.lock"
-  runs_on: "linux-arm64-default" # オプション、デフォルトは "linux-arm64-default"
+  runs_on: "ubuntu-slim" # オプション、デフォルトは "ubuntu-slim"
 ```
 
 **パラメータ:**
 - `lockPath`: ロックファイルのパス（デフォルト: `yarn.lock`）
-- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
 
 ### 6. staging_deploy
 指定されたブランチから staging ブランチへの自動デプロイPRを作成・管理するワークフローです。
@@ -84,13 +84,13 @@ uses: SonicGarden/workflows/.github/workflows/staging_deploy.yml@main
 with:
   source_branch: "release-candidate" # オプション、デフォルトは "release-candidate"
   target_branch: "staging" # オプション、デフォルトは "staging"
-  runs_on: "linux-arm64-default" # オプション、デフォルトは "linux-arm64-default"
+  runs_on: "ubuntu-slim" # オプション、デフォルトは "ubuntu-slim"
 ```
 
 **パラメータ:**
 - `source_branch`: デプロイ元のブランチ名（デフォルト: `release-candidate`）
 - `target_branch`: デプロイ先のブランチ名（デフォルト: `staging`）
-- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
 
 **機能:**
 - 既存のPRがあるかをチェック
@@ -135,7 +135,7 @@ secrets:
 - `guideline_files`: コードレビューのガイドラインファイルのパス一覧（改行区切り）
 - `model`: 使用するClaudeモデル（オプション、デフォルトは `sonnet`。空文字を明示指定するとアクション側のデフォルトになる）
 - `minimum_changed_lines`: 前回レビューからの最小変更行数（デフォルト: 0、0の場合は常に実行）
-- `runs_on`: GitHub Actions runner の指定（デフォルト: `linux-arm64-default`）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-24.04-arm`）
 
 **必要なシークレット:**
 - `claude_oauth_token`: Claude OAuth トークン（推奨）
