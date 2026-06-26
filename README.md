@@ -85,20 +85,24 @@ with:
   source_branch: "release-candidate" # オプション、デフォルトは "release-candidate"
   target_branch: "staging" # オプション、デフォルトは "staging"
   runs_on: "ubuntu-slim" # オプション、デフォルトは "ubuntu-slim"
+  enable_auto_merge: true # オプション、デフォルトは true
 ```
 
 **パラメータ:**
 - `source_branch`: デプロイ元のブランチ名（デフォルト: `release-candidate`）
 - `target_branch`: デプロイ先のブランチ名（デフォルト: `staging`）
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
+- `enable_auto_merge`: CI通過後にPRを自動マージするか（デフォルト: `true`）。`false` にするとPRの作成・更新のみ行い、自動マージは設定しない
 
 **機能:**
 - 既存のPRがあるかをチェック
 - 新しいPRの作成または既存PRの更新
-- 自動マージの設定
+- 自動マージの設定（`enable_auto_merge: true` の場合のみ）
 - `[skip deploy]` がコミットメッセージに含まれている場合はスキップ
 
 **GitHub上での設定（CIが通ってから自動マージするため）:**
+
+> **Note:** 以下の設定は `enable_auto_merge: true`（デフォルト）で自動マージを利用する場合に必要です。`false` の場合は不要です。
 
 このワークフローでPRが自動的にマージされるようにするには、リポジトリで以下の設定が必要です：
 
