@@ -10,6 +10,7 @@ Reusable GitHub Actions workflows
 - [npm_changelog](#5-npm_changelog) - npm/yarnロックファイルの変更検出とchangelog投稿
 - [staging_deploy](#6-staging_deploy) - staging環境への自動デプロイPR作成
 - [claude-review](#7-claude-review) - Claude Codeによる自動コードレビュー
+- [heroku_deploy_notify](#8-heroku_deploy_notify) - Herokuデプロイ完了/失敗をPRに通知
 
 ## 利用可能なワークフロー
 
@@ -151,6 +152,62 @@ secrets:
 - コード品質、セキュリティ、パフォーマンスなど多角的な観点からのレビュー
 - 既存のClaude botコメントを自動削除して重複を防止
 - `[skip review]` がコミットメッセージに含まれている場合はレビューをスキップ
+
+### 8. heroku_deploy_notify
+Heroku-GitHub 自動デプロイ対象ブランチへの push を契機に、Heroku Platform API をポーリングしてリリースの完了/失敗を検知し、そのマージコミットに紐づく PR にデプロイ結果をコメントするワークフローです。デプロイ本体には介入しない外形監視です。
+
+**使用方法:**
+
+呼び出し側でブランチごとに job を分け、`heroku_app_name` / `env_name` を渡します。`push` トリガーと `concurrency` は呼び出し側で定義します。
+
+```yaml
+name: Deploy Notify
+on:
+  push:
+    branches: [staging, main]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  notify-production:
+    if: github.ref == 'refs/heads/main'
+    uses: SonicGarden/workflows/.github/workflows/heroku_deploy_notify.yml@main
+    with:
+      heroku_app_name: my-app
+      env_name: production
+    secrets:
+      heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+  notify-staging:
+    if: github.ref == 'refs/heads/staging'
+    uses: SonicGarden/workflows/.github/workflows/heroku_deploy_notify.yml@main
+    with:
+      heroku_app_name: my-app-staging
+      env_name: staging
+    secrets:
+      heroku_api_key: ${{ secrets.HEROKU_API_KEY }}
+```
+
+**パラメータ:**
+- `heroku_app_name`: Heroku アプリ名（必須）
+- `env_name`: PR コメントに表示する環境名（必須、例: `production` / `staging`）
+- `poll_interval_seconds`: ポーリング間隔（秒）（デフォルト: `15`）
+- `poll_max_attempts`: 最大試行回数（デフォルト: `48`。`poll_interval_seconds × この値`が監視時間。ランナーの15分上限内に収めること）
+- `release_fetch_count`: 取得する最新 release 件数（デフォルト: `20`）
+- `notify_on_success`: 成功通知の ON/OFF（デフォルト: `true`）
+- `notify_on_failure`: 失敗通知の ON/OFF（デフォルト: `true`）
+- `notify_on_timeout`: release を検知できずタイムアウトした場合の通知 ON/OFF（デフォルト: `true`）
+
+**必要なシークレット:**
+- `heroku_api_key`: read-protected スコープの Heroku API トークン（read スコープだと releases の取得が 403 になります）
+
+**前提:**
+- 対象リポジトリで Heroku-GitHub の自動デプロイが有効であること
+- Heroku release の `description` が `Deploy <短縮SHA>` 形式であること（コミット SHA 先頭7文字で照合します）
+
+**機能:**
+- Heroku release を最大 `poll_max_attempts` 回ポーリングして完了/失敗を検知
+- マージコミットに紐づく PR にデプロイ結果（成功/失敗/タイムアウト）をコメント
+- PR コメントは `push` イベント時のみ（手動実行などでは誤爆防止でスキップ）
 
 ## 使用例
 
