@@ -18,6 +18,11 @@ on:
         required: false
         type: string
         default: "ubuntu-slim"
+      enable_auto_merge:
+        description: "CI通過後にPRを自動マージするか"
+        required: false
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -70,7 +75,7 @@ jobs:
           ### 変更内容
           ${{ github.event.head_commit.message }}
 
-          CIが全て通過したら自動的にマージされます。
+          CIが全て通過したら、設定に応じて自動的にマージされます。
 
           ---
           _このPRは自動生成されました_"
@@ -99,7 +104,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for new PR
-        if: steps.create-pr.outputs.pr_number != ''
+        if: inputs.enable_auto_merge && steps.create-pr.outputs.pr_number != ''
         run: |
           # NOTE: 新しく作成されたPRに対して自動マージを設定
           gh pr merge ${{ steps.create-pr.outputs.pr_number }} --auto --merge
@@ -108,7 +113,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for existing PR
-        if: steps.check-pr.outputs.existing_pr != ''
+        if: inputs.enable_auto_merge && steps.check-pr.outputs.existing_pr != ''
         run: |
           # NOTE: 既存のPRに対して自動マージを設定（まだ設定されていない場合）
           gh pr merge ${{ steps.check-pr.outputs.existing_pr }} --auto --merge
@@ -127,7 +132,7 @@ jobs:
           ### 最新の変更内容
           ${{ github.event.head_commit.message }}
 
-          CIが全て通過したら自動的にマージされます。
+          CIが全て通過したら、設定に応じて自動的にマージされます。
 
           ---
           _このPRは自動生成されました（最終更新: $(date '+%Y-%m-%d %H:%M:%S'))_"
