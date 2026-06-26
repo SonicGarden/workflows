@@ -196,6 +196,7 @@ jobs:
 - `notify_on_success`: 成功通知の ON/OFF（デフォルト: `true`）
 - `notify_on_failure`: 失敗通知の ON/OFF（デフォルト: `true`）
 - `notify_on_timeout`: release を検知できずタイムアウトした場合の通知 ON/OFF（デフォルト: `true`）
+- `include_release_log`: PR コメントに Heroku release phase ログ（折りたたみ）を添付する ON/OFF（デフォルト: `true`）
 
 **必要なシークレット:**
 - `heroku_api_key`: read-protected スコープの Heroku API トークン（read スコープだと releases の取得が 403 になります）
