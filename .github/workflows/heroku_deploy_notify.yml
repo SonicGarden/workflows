@@ -47,6 +47,11 @@ on:
         required: false
         type: string
         default: "true"
+      include_release_log:
+        description: "PR コメントに Heroku release phase ログ（折りたたみ）を添付する ON/OFF"
+        required: false
+        type: string
+        default: "true"
     secrets:
       heroku_api_key:
         description: "read-protected スコープの Heroku API トークン（read だと releases が 403）"
@@ -68,6 +73,7 @@ jobs:
       NOTIFY_ON_SUCCESS: ${{ inputs.notify_on_success }} # 成功通知 ON/OFF
       NOTIFY_ON_FAILURE: ${{ inputs.notify_on_failure }} # 失敗通知 ON/OFF
       NOTIFY_ON_TIMEOUT: ${{ inputs.notify_on_timeout }} # release を検知できずタイムアウトした場合の通知 ON/OFF
+      INCLUDE_RELEASE_LOG: ${{ inputs.include_release_log }} # PR コメントに release phase ログを添付する ON/OFF
     defaults:
       run:
         shell: bash
@@ -98,7 +104,7 @@ jobs:
           set -euo pipefail
           API="https://api.heroku.com"
           short="${TARGET_SHA:0:7}" # github.sha の先頭7文字（Heroku の description は "Deploy <短縮SHA>" 形式）
-          found=false; status=""; version=""; description=""
+          found=false; status=""; version=""; description=""; output_stream_url=""
 
           # 最新 release を version 降順で取得する。
           # HTTP ステータスを本文末尾に付与して返し、呼び出し側で認可エラー(4xx)と一時エラー(5xx)を区別する。
@@ -150,6 +156,8 @@ jobs:
               status="$(echo "$rel" | jq -r '.status // "unknown"')"
               version="$(echo "$rel" | jq -r '.version // ""')"
               description="$(echo "$rel" | jq -r '.description // ""')"
+              # release phase の output 取得用 URL。release phase 未使用の release では null → 空文字
+              output_stream_url="$(echo "$rel" | jq -r '.output_stream_url // ""')"
               echo "検出: v$version status=$status ($description)"
               # release phase 利用時は1デプロイで release が複数更新される。最終 status で抜ける。
               if [[ "$status" == "succeeded" || "$status" == "failed" ]]; then
@@ -171,6 +179,10 @@ jobs:
             echo "description<<__DESC__"
             echo "$description"
             echo "__DESC__"
+            # output_stream_url は通常改行を含まないが、安全側に倒して heredoc 形式で出力
+            echo "output_stream_url<<__OSU__"
+            echo "$output_stream_url"
+            echo "__OSU__"
           } >> "$GITHUB_OUTPUT"
 
       # 3) マージコミットSHA から対象 PR を特定（push イベント時のみ。手動実行では誤爆防止でスキップ）
@@ -192,7 +204,50 @@ jobs:
           fi
           echo "number=$number" >> "$GITHUB_OUTPUT"
 
-      # 4) PR にデプロイ結果をコメント（成功/失敗/タイムアウトを本文で出し分け）
+      # 4) release phase のログ（output_stream_url）を取得して末尾切り詰め
+      #    成功/失敗が確定し、PR が特定でき、ログ添付が ON で URL が取れたときのみ実行（curl の無駄打ち防止）
+      - name: Fetch release log
+        id: releaselog
+        if: >-
+          ${{ github.event_name == 'push'
+              && steps.pr.outputs.number != ''
+              && inputs.include_release_log == 'true'
+              && steps.poll.outputs.output_stream_url != ''
+              && (steps.poll.outputs.status == 'succeeded' || steps.poll.outputs.status == 'failed') }}
+        env:
+          # NOTE: 値はすべて env 経由で受け、run へ式を直接展開しない（コマンドインジェクション対策）
+          OUTPUT_STREAM_URL: ${{ steps.poll.outputs.output_stream_url }}
+        run: |
+          set -euo pipefail
+          MAX_LOG_LINES=100   # 末尾 N 行に制限（見やすさ）
+          MAX_LOG_BYTES=10000 # さらに末尾 N バイトに制限（PR コメントの約65536字上限への安全マージン）
+
+          # output_stream_url は release phase の標準出力を chunked encoding で返す署名付き URL。
+          # release 完了後もしばらくバッファされるが、接続が閉じずハングし得るため --max-time で必ず打ち切る。
+          # 取得は冪等でないため --retry は付けない。失敗時はログ無しでフォールバック（ジョブは落とさない）。
+          raw="$(curl -sSL --max-time 20 "${OUTPUT_STREAM_URL}" || true)"
+
+          log=""
+          if [[ -n "$raw" ]]; then
+            # 末尾 N 行 → さらに末尾 N バイトに制限
+            log="$(printf '%s' "$raw" | tail -n "$MAX_LOG_LINES")"
+            bytes="$(printf '%s' "$log" | wc -c)"
+            if (( bytes > MAX_LOG_BYTES )); then
+              log="$(printf '%s\n%s' '(... 先頭省略 ...)' "$(printf '%s' "$log" | tail -c "$MAX_LOG_BYTES")")"
+            fi
+            # PR コメントは外側を4連バッククォートで囲む。ログ中の行頭4連以上バッククォートは
+            # フェンスを誤って閉じるため、3連に縮めて無害化（表示崩れ防止。ログの意味は保たれる）。
+            # shellcheck disable=SC2016 # sed の置換パターンはリテラル。シェル展開は不要
+            log="$(printf '%s' "$log" | sed -E 's/^`{4,}/```/')"
+          fi
+
+          {
+            echo "log<<__RELEASE_LOG__"
+            printf '%s\n' "$log"
+            echo "__RELEASE_LOG__"
+          } >> "$GITHUB_OUTPUT"
+
+      # 5) PR にデプロイ結果をコメント（成功/失敗/タイムアウトを本文で出し分け）
       - name: Comment deploy result on PR
         if: ${{ github.event_name == 'push' && steps.pr.outputs.number != '' }}
         env:
@@ -207,6 +262,7 @@ jobs:
           VERSION: ${{ steps.poll.outputs.version }}
           DESCRIPTION: ${{ steps.poll.outputs.description }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RELEASE_LOG: ${{ steps.releaselog.outputs.log }} # release phase ログ（取得できなかった場合は空）
         run: |
           set -euo pipefail
           body=""
@@ -230,6 +286,16 @@ jobs:
             body="⚠️ **${ENV_NAME} デプロイ検知タイムアウト**
           コミット \`${SHA}\` に対応する Heroku release を時間内に検知できませんでした（自動デプロイ未起動 / ビルド失敗の可能性）。
           - [実行ログ](${RUN_URL})"
+          fi
+          # 成功/失敗時、release phase ログがあれば <details> で折りたたんで添付する。
+          # status と RELEASE_LOG の有無で自動的に成功/失敗のみに効く（タイムアウト系には付かない）。
+          # NOTE: details タグやコードフェンスは行頭インデントが付くと Markdown でコードブロック扱いになり
+          #       HTML として解釈されない。YAML ブロックスカラのインデントを混入させないため printf で組み立てる。
+          #       外側フェンスは4連バッククォート（ログ中の3連フェンスに誤って閉じられないため）。
+          if [[ -n "$body" && -n "${RELEASE_LOG:-}" && ( "$STATUS" == "succeeded" || "$STATUS" == "failed" ) ]]; then
+            details="$(printf '%s\n' '' '<details><summary>リリースログ（末尾のみ）</summary>' '' '````' "$RELEASE_LOG" '````' '' '</details>')"
+            body="${body}
+          ${details}"
           fi
           if [[ -n "$body" ]]; then
             gh pr comment "$PR_NUMBER" --body "$body"
