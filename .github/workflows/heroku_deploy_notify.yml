@@ -1,0 +1,304 @@
+name: heroku_deploy_notify
+
+# Heroku-GitHub 自動デプロイ対象ブランチへの push を契機に、
+# Heroku Platform API をポーリングしてリリース完了/失敗を検知し、
+# そのマージコミットに紐づく PR にデプロイ結果をコメントする。
+# デプロイ本体には介入しない外形監視（Rails/release phase/Procfile は変更しない）。
+#
+# 再利用可能ワークフロー（workflow_call）。push トリガーや concurrency は呼び出し側で定義する。
+on:
+  workflow_call:
+    inputs:
+      heroku_app_name:
+        description: "Heroku アプリ名（例: my-app-staging）"
+        required: true
+        type: string
+      env_name:
+        description: "PR コメントに表示する環境名（例: production / staging）"
+        required: true
+        type: string
+      poll_interval_seconds:
+        description: "ポーリング間隔（秒）"
+        required: false
+        type: string
+        default: "15"
+      poll_max_attempts:
+        description: "最大試行回数（poll_interval_seconds × この値が監視時間。ubuntu-slim の15分上限内に収めること）"
+        required: false
+        type: string
+        default: "48"
+      release_fetch_count:
+        description: "取得する最新 release 件数"
+        required: false
+        type: string
+        default: "20"
+      notify_on_success:
+        description: "成功通知 ON/OFF"
+        required: false
+        type: string
+        default: "true"
+      notify_on_failure:
+        description: "失敗通知 ON/OFF"
+        required: false
+        type: string
+        default: "true"
+      notify_on_timeout:
+        description: "release を検知できずタイムアウトした場合の通知 ON/OFF"
+        required: false
+        type: string
+        default: "true"
+      include_release_log:
+        description: "PR コメントに Heroku release phase ログ（折りたたみ）を添付する ON/OFF"
+        required: false
+        type: string
+        default: "true"
+    secrets:
+      heroku_api_key:
+        description: "read-protected スコープの Heroku API トークン（read だと releases が 403）"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: write # マージされた PR へのコメントに必要
+
+jobs:
+  notify:
+    runs-on: ubuntu-slim
+    timeout-minutes: 15 # ubuntu-slim はジョブ実行時間が15分でハード打ち切り。bash 側でもこの上限内に収める
+    env:
+      HEROKU_API_KEY: ${{ secrets.heroku_api_key }} # read-protected スコープの Heroku API トークン（read だと releases が 403）
+      POLL_INTERVAL_SECONDS: ${{ inputs.poll_interval_seconds }} # ポーリング間隔
+      POLL_MAX_ATTEMPTS: ${{ inputs.poll_max_attempts }} # 最大試行回数（15s × 48 ≒ 12分）。起動/curl/jq/gh のオーバーヘッド分のマージンを残し ubuntu-slim の15分上限内に収める
+      RELEASE_FETCH_COUNT: ${{ inputs.release_fetch_count }} # 取得する最新 release 件数
+      NOTIFY_ON_SUCCESS: ${{ inputs.notify_on_success }} # 成功通知 ON/OFF
+      NOTIFY_ON_FAILURE: ${{ inputs.notify_on_failure }} # 失敗通知 ON/OFF
+      NOTIFY_ON_TIMEOUT: ${{ inputs.notify_on_timeout }} # release を検知できずタイムアウトした場合の通知 ON/OFF
+      INCLUDE_RELEASE_LOG: ${{ inputs.include_release_log }} # PR コメントに release phase ログを添付する ON/OFF
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # 1) 入力から Heroku アプリ名・環境名・対象 SHA を決定
+      - name: Resolve target
+        id: resolve
+        env:
+          APP: ${{ inputs.heroku_app_name }}
+          ENV_NAME: ${{ inputs.env_name }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "app=$APP"
+            echo "env_name=$ENV_NAME"
+            echo "sha=$GITHUB_SHA"
+          } >> "$GITHUB_OUTPUT"
+          echo "対象アプリ: $APP / 環境: $ENV_NAME / SHA: $GITHUB_SHA"
+
+      # 2) Heroku release をポーリング（description の "Deploy <短縮SHA>" で照合）
+      - name: Poll Heroku release
+        id: poll
+        env:
+          APP: ${{ steps.resolve.outputs.app }}
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          API="https://api.heroku.com"
+          short="${TARGET_SHA:0:7}" # github.sha の先頭7文字（Heroku の description は "Deploy <短縮SHA>" 形式）
+          found=false; status=""; version=""; description=""; output_stream_url=""
+
+          # 最新 release を version 降順で取得する。
+          # HTTP ステータスを本文末尾に付与して返し、呼び出し側で認可エラー(4xx)と一時エラー(5xx)を区別する。
+          # NOTE: -f を使わないのは、403 等の本文（forbidden メッセージ）を握りつぶさず診断に使うため。
+          fetch() {
+            curl -sSL --retry 3 --retry-delay 3 --retry-all-errors \
+              -w '\n%{http_code}' \
+              -H "Accept: application/vnd.heroku+json; version=3" \
+              -H "Authorization: Bearer ${HEROKU_API_KEY}" \
+              -H "Range: version ..; order=desc, max=${RELEASE_FETCH_COUNT}" \
+              "${API}/apps/${APP}/releases"
+          }
+
+          for ((i = 1; i <= POLL_MAX_ATTEMPTS; i++)); do
+            echo "::group::poll ${i}/${POLL_MAX_ATTEMPTS}"
+            resp="$(fetch || true)"
+            code="${resp##*$'\n'}" # 末尾行の HTTP ステータス
+            body="${resp%$'\n'*}"  # それ以外の本文
+            case "$code" in
+              2*) : ;; # 成功
+              401 | 403)
+                # 認証/認可エラー。HEROKU_API_KEY のスコープ不足（releases は read-protected が必要）や
+                # 対象アプリ未参加が原因。リトライ・ポーリングでは回復しないため即時 fail。
+                echo "::endgroup::"
+                echo "::error::Heroku API が ${code} を返しました（app=${APP}）。HEROKU_API_KEY のスコープ不足（releases は read-protected が必要。read では 403）か、対象アプリへの権限がない可能性があります。"
+                echo "$body"
+                exit 1
+                ;;
+              404)
+                echo "::endgroup::"
+                echo "::error::Heroku API が 404 を返しました。アプリ名 '${APP}' が存在しないか、トークンから参照できません。"
+                echo "$body"
+                exit 1
+                ;;
+              *)
+                # 5xx・ネットワーク不調など一時的なエラー。今回分はスキップして次の試行で回復を待つ。
+                echo "Heroku API が一時エラー（HTTP ${code:-不明}）。このポーリングはスキップします。"
+                echo "::endgroup::"
+                sleep "${POLL_INTERVAL_SECONDS}"
+                continue
+                ;;
+            esac
+            # Range の order=desc が効かない環境向けに jq 側でも version 降順に整列して堅牢化
+            json="$(echo "$body" | jq -c 'sort_by(.version) | reverse' || echo '[]')"
+            # description に短縮SHA を含む release を探す
+            rel="$(echo "$json" | jq -c --arg s "$short" 'map(select((.description // "") | contains($s))) | .[0] // empty')"
+            if [[ -n "$rel" ]]; then
+              found=true
+              status="$(echo "$rel" | jq -r '.status // "unknown"')"
+              version="$(echo "$rel" | jq -r '.version // ""')"
+              description="$(echo "$rel" | jq -r '.description // ""')"
+              # release phase の output 取得用 URL。release phase 未使用の release では null → 空文字
+              output_stream_url="$(echo "$rel" | jq -r '.output_stream_url // ""')"
+              echo "検出: v$version status=$status ($description)"
+              # release phase 利用時は1デプロイで release が複数更新される。最終 status で抜ける。
+              if [[ "$status" == "succeeded" || "$status" == "failed" ]]; then
+                echo "::endgroup::"
+                break
+              fi
+            else
+              echo "SHA $short に一致する release 未検出（ビルド中の可能性）"
+            fi
+            echo "::endgroup::"
+            sleep "${POLL_INTERVAL_SECONDS}"
+          done
+
+          {
+            echo "found=$found"
+            echo "status=$status"
+            echo "version=$version"
+            # description は改行を含み得るため heredoc 形式で出力
+            echo "description<<__DESC__"
+            echo "$description"
+            echo "__DESC__"
+            # output_stream_url は通常改行を含まないが、安全側に倒して heredoc 形式で出力
+            echo "output_stream_url<<__OSU__"
+            echo "$output_stream_url"
+            echo "__OSU__"
+          } >> "$GITHUB_OUTPUT"
+
+      # 3) マージコミットSHA から対象 PR を特定（push イベント時のみ。手動実行では誤爆防止でスキップ）
+      - name: Find associated PR
+        id: pr
+        if: ${{ github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }} # checkout しないため gh のリポジトリ解決用に明示
+          SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          set -euo pipefail
+          # github.sha に紐づくマージ済み PR 番号を取得（無ければ空）
+          number="$(gh pr list --search "$SHA" --state merged --json number --jq '.[0].number // empty' || true)"
+          if [[ -z "$number" ]]; then
+            echo "SHA $SHA に紐づくマージ済み PR が見つかりませんでした。コメントはスキップします。"
+          else
+            echo "対象 PR: #$number"
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      # 4) release phase のログ（output_stream_url）を取得して末尾切り詰め
+      #    成功/失敗が確定し、PR が特定でき、ログ添付が ON で URL が取れたときのみ実行（curl の無駄打ち防止）
+      - name: Fetch release log
+        id: releaselog
+        if: >-
+          ${{ github.event_name == 'push'
+              && steps.pr.outputs.number != ''
+              && inputs.include_release_log == 'true'
+              && steps.poll.outputs.output_stream_url != ''
+              && (steps.poll.outputs.status == 'succeeded' || steps.poll.outputs.status == 'failed') }}
+        env:
+          # NOTE: 値はすべて env 経由で受け、run へ式を直接展開しない（コマンドインジェクション対策）
+          OUTPUT_STREAM_URL: ${{ steps.poll.outputs.output_stream_url }}
+        run: |
+          set -euo pipefail
+          MAX_LOG_LINES=100   # 末尾 N 行に制限（見やすさ）
+          MAX_LOG_BYTES=10000 # さらに末尾 N バイトに制限（PR コメントの約65536字上限への安全マージン）
+
+          # output_stream_url は release phase の標準出力を chunked encoding で返す署名付き URL。
+          # release 完了後もしばらくバッファされるが、接続が閉じずハングし得るため --max-time で必ず打ち切る。
+          # 取得は冪等でないため --retry は付けない。失敗時はログ無しでフォールバック（ジョブは落とさない）。
+          raw="$(curl -sSL --max-time 20 "${OUTPUT_STREAM_URL}" || true)"
+
+          log=""
+          if [[ -n "$raw" ]]; then
+            # 末尾 N 行 → さらに末尾 N バイトに制限
+            log="$(printf '%s' "$raw" | tail -n "$MAX_LOG_LINES")"
+            bytes="$(printf '%s' "$log" | wc -c)"
+            if (( bytes > MAX_LOG_BYTES )); then
+              log="$(printf '%s\n%s' '(... 先頭省略 ...)' "$(printf '%s' "$log" | tail -c "$MAX_LOG_BYTES")")"
+            fi
+            # PR コメントは外側を4連バッククォートで囲む。ログ中の行頭4連以上バッククォートは
+            # フェンスを誤って閉じるため、3連に縮めて無害化（表示崩れ防止。ログの意味は保たれる）。
+            # shellcheck disable=SC2016 # sed の置換パターンはリテラル。シェル展開は不要
+            log="$(printf '%s' "$log" | sed -E 's/^`{4,}/```/')"
+          fi
+
+          {
+            echo "log<<__RELEASE_LOG__"
+            printf '%s\n' "$log"
+            echo "__RELEASE_LOG__"
+          } >> "$GITHUB_OUTPUT"
+
+      # 5) PR にデプロイ結果をコメント（成功/失敗/タイムアウトを本文で出し分け）
+      - name: Comment deploy result on PR
+        if: ${{ github.event_name == 'push' && steps.pr.outputs.number != '' }}
+        env:
+          # NOTE: 値はすべて env 経由で受け、run へ式を直接展開しない（コマンドインジェクション対策）
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }} # checkout しないため gh のリポジトリ解決用に明示
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          ENV_NAME: ${{ steps.resolve.outputs.env_name }}
+          SHA: ${{ steps.resolve.outputs.sha }}
+          FOUND: ${{ steps.poll.outputs.found }}
+          STATUS: ${{ steps.poll.outputs.status }}
+          VERSION: ${{ steps.poll.outputs.version }}
+          DESCRIPTION: ${{ steps.poll.outputs.description }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RELEASE_LOG: ${{ steps.releaselog.outputs.log }} # release phase ログ（取得できなかった場合は空）
+        run: |
+          set -euo pipefail
+          body=""
+          if [[ "$FOUND" == "true" && "$STATUS" == "succeeded" && "$NOTIFY_ON_SUCCESS" == "true" ]]; then
+            body="✅ **${ENV_NAME} デプロイ完了** 🚀
+          - リリース: v${VERSION}
+          - コミット: \`${SHA}\`
+          - [実行ログ](${RUN_URL})"
+          elif [[ "$FOUND" == "true" && "$STATUS" == "failed" && "$NOTIFY_ON_FAILURE" == "true" ]]; then
+            body="❌ **${ENV_NAME} デプロイ失敗** 😱
+          - リリース: v${VERSION} / ${DESCRIPTION}
+          - [実行ログ](${RUN_URL})"
+          elif [[ "$FOUND" == "true" && "$STATUS" != "succeeded" && "$STATUS" != "failed" && "$NOTIFY_ON_TIMEOUT" == "true" ]]; then
+            # release は検出したが、時間内に succeeded/failed が確定しなかったケース（status は pending/unknown 等）
+            # NOTE: status==succeeded/failed をここで除外しないと、NOTIFY_ON_SUCCESS/FAILURE を off にした際に
+            #       成功/失敗をタイムアウトと誤表示してしまう
+            body="⚠️ **${ENV_NAME} デプロイ状態未確定（タイムアウト）**
+          コミット \`${SHA}\` の Heroku release（v${VERSION}）を検出しましたが、時間内に完了/失敗が確定しませんでした（status=${STATUS}）。
+          - [実行ログ](${RUN_URL})"
+          elif [[ "$FOUND" != "true" && "$NOTIFY_ON_TIMEOUT" == "true" ]]; then
+            body="⚠️ **${ENV_NAME} デプロイ検知タイムアウト**
+          コミット \`${SHA}\` に対応する Heroku release を時間内に検知できませんでした（自動デプロイ未起動 / ビルド失敗の可能性）。
+          - [実行ログ](${RUN_URL})"
+          fi
+          # 成功/失敗時、release phase ログがあれば <details> で折りたたんで添付する。
+          # status と RELEASE_LOG の有無で自動的に成功/失敗のみに効く（タイムアウト系には付かない）。
+          # NOTE: details タグやコードフェンスは行頭インデントが付くと Markdown でコードブロック扱いになり
+          #       HTML として解釈されない。YAML ブロックスカラのインデントを混入させないため printf で組み立てる。
+          #       外側フェンスは4連バッククォート（ログ中の3連フェンスに誤って閉じられないため）。
+          if [[ -n "$body" && -n "${RELEASE_LOG:-}" && ( "$STATUS" == "succeeded" || "$STATUS" == "failed" ) ]]; then
+            details="$(printf '%s\n' '' '<details><summary>リリースログ（末尾のみ）</summary>' '' '````' "$RELEASE_LOG" '````' '' '</details>')"
+            body="${body}
+          ${details}"
+          fi
+          if [[ -n "$body" ]]; then
+            gh pr comment "$PR_NUMBER" --body "$body"
+          else
+            echo "通知対象外（フラグ OFF もしくは status 未確定）のためコメントしません。"
+          fi
