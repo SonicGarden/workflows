@@ -1,0 +1,124 @@
+name: Claude Dependabot Review
+
+# Dependabot の依存更新 PR について「CI（テスト）が緑でも見逃す挙動変化・deprecation」を
+# CHANGELOG ベースで Claude に評価させ、PR へ要約コメントを 1 本だけ残す再利用可能ワークフロー。
+#
+# 設計意図:
+# - 検出/分類は Dependabot が担当（再発明しない）。
+# - 「壊れたか」は CI（テスト）が担当。その conclusion を Claude の入力にする。
+# - CHANGELOG/Release notes は Dependabot が PR 本文に展開したものを一次ソースにする。
+#
+# NOTE: 再利用可能ワークフロー(workflow_call)では workflow_run トリガーを定義できないため、
+#       発火トリガー(on: workflow_run)と発火条件(CI 成功 & dependabot 起点)は呼び出し側が持つ。
+#       呼び出し側は github.event.workflow_run.head_sha を inputs で渡す。
+#       PR HEAD は checkout せず base ブランチのみを置く＝信頼コンテキストに untrusted コードを置かない。
+#       (README の「9. claude-dependabot-review」に呼び出し側の完全な例あり)
+on:
+  workflow_call:
+    inputs:
+      head_sha:
+        description: "レビュー対象 PR の HEAD コミット SHA（呼び出し側で github.event.workflow_run.head_sha を渡す）"
+        required: true
+        type: string
+      model:
+        description: "Claude model to use (default: sonnet)"
+        required: false
+        type: string
+        default: "sonnet"
+      runs_on:
+        description: "GitHub Actions runner to use"
+        required: false
+        type: string
+        default: "ubuntu-24.04-arm"
+    secrets:
+      claude_oauth_token:
+        required: false
+        description: Claude OAuth token for dependabot review
+      anthropic_api_key:
+        required: false
+        description: Anthropic API key for dependabot review
+
+jobs:
+  claude-dependabot-review:
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      # NOTE: ベースブランチ（更新適用前の現状コード）を checkout する。
+      #       目的は「この更新が今のコードにどう影響するか」の調査なので、現状コードを grep/Read できれば十分。
+      #       Dependabot が書き換えた PR HEAD は checkout しない＝信頼コンテキストで untrusted コードを置かない。
+      - name: Checkout base branch
+        uses: actions/checkout@v7
+        with:
+          token: ${{ github.token }}
+
+      # NOTE: 再利用側には workflow_run payload(pull_requests[0].number)が来ないため、
+      #       呼び出し側から渡された head_sha に紐づく open PR を検索して PR 番号を解決する。
+      - name: Resolve PR number
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # NOTE: untrusted input を run: に直接展開せず env 経由で受ける（GitHub Actions injection 対策）
+          HEAD_SHA: ${{ inputs.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          PR_NUMBER=$(gh api "repos/${REPO}/commits/${HEAD_SHA}/pulls" \
+            --jq '.[] | select(.state=="open") | .number' | head -n1)
+          if [ -z "$PR_NUMBER" ]; then
+            echo "PR not found for ${HEAD_SHA}; skipping."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # NOTE: 前回の本WFコメントを消して sticky 的に1本に保つ（claude-review.yml と同じ慣行）
+      - name: Delete previous comments
+        if: steps.pr.outputs.found == 'true'
+        uses: aki77/delete-pr-comments-action@v3
+        with:
+          token: ${{ github.token }}
+          pullRequestNumber: ${{ steps.pr.outputs.number }}
+          usernames: claude[bot]
+          # NOTE: Claude は add_issue_comment で PR 本文にコメントするため issue comment を削除対象に含める
+          includeIssueComments: "true"
+          onlyNotMinimized: "true"
+
+      - name: Run Claude Dependabot Review
+        if: steps.pr.outputs.found == 'true'
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.claude_oauth_token }}
+          anthropic_api_key: ${{ secrets.claude_oauth_token != '' && '' || secrets.anthropic_api_key }}
+          # NOTE: 本WFは呼び出し側で workflow_run を dependabot[bot] 起点に限定して発火する設計のため、
+          #       アクションのボットガードに dependabot[bot] を明示的に許可する。'*' は使わない（許可範囲を最小化）。
+          allowed_bots: "dependabot[bot]"
+          display_report: true
+          # NOTE: Skill と GitHub MCP（PR読み取り/コメント投稿）に限定
+          claude_args: |
+            ${{ inputs.model != '' && format('--model {0}', inputs.model) || '' }}
+            --allowedTools "Bash(gh:*),Grep,Glob,Read,Skill,WebFetch,mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__add_issue_comment"
+          prompt: |
+            あなたは Dependabot の依存更新 PR をレビューする。CI（テスト）は既に成功している。
+            あなたの役割は「CI が緑でも見逃す」リスクだけに集中すること。テストが拾える破壊（型/ビルド/テスト失敗）は CI に任せ、再指摘しない。
+
+            Repository: ${{ github.repository }}
+            PR Number: ${{ steps.pr.outputs.number }}
+
+            手順:
+            1. PR の diff（依存マニフェスト・ロックファイル、および CI/ワークフロー定義の差分）から、更新されたパッケージ名と new/old バージョンを抽出する。対象ファイルは言語・パッケージマネージャを問わず diff から判別する。
+            2. Dependabot が PR 本文(body)に各更新の Release notes / Changelog / Commits を展開している。これを一次ソースとして読む。本文に十分な情報がない場合のみ、WebFetch でリリースページを補足する。
+            3. 各更新について「CI では落ちないが危ういもの」だけを評価する:
+               - ランタイム挙動の変化（デフォルト値変更・出力フォーマット変更など、テスト未カバーで本番で表面化するもの）
+               - 非推奨化(deprecation): 今は緑だが次のメジャーで壊れる地雷
+               - 言語/ランタイムのバージョン要件の変化、モジュール形式・配布形態の変更、依存関係の制約（peer/互換要件など）の変化
+            4. このリポジトリのコードに実際に影響しうるかを判断する。作業ディレクトリにベースブランチ（更新適用前の現状コード）が checkout 済みなので、Grep/Glob/Read で該当パッケージの import や非推奨/削除予定 API の使用箇所を直接確認する。
+
+            出力（PR へコメント1本、日本語、簡潔に）:
+            - 各パッケージ1行サマリ表: | パッケージ | 旧→新 | 挙動変化 | deprecation | このリポジトリへの影響 |
+            - 「影響あり」のものだけ、確認/対応のポイントを箇条書きで補足する。
+            - 全て問題なければ「CI（テスト）緑。CHANGELOG上も挙動変化/deprecationの懸念なし。」と明記する。
+            - 推測で危険を煽らない。確証がない場合は「要確認」と明示する。

@@ -11,6 +11,7 @@ Reusable GitHub Actions workflows
 - [staging_deploy](#6-staging_deploy) - staging環境への自動デプロイPR作成
 - [claude-review](#7-claude-review) - Claude Codeによる自動コードレビュー
 - [heroku_deploy_notify](#8-heroku_deploy_notify) - Herokuデプロイ完了/失敗をPRに通知
+- [claude-dependabot-review](#9-claude-dependabot-review) - Dependabot更新PRをCI緑でも危うい観点でClaudeレビュー
 
 ## 利用可能なワークフロー
 
@@ -209,6 +210,58 @@ jobs:
 - Heroku release を最大 `poll_max_attempts` 回ポーリングして完了/失敗を検知
 - マージコミットに紐づく PR にデプロイ結果（成功/失敗/タイムアウト）をコメント
 - PR コメントは `push` イベント時のみ（手動実行などでは誤爆防止でスキップ）
+
+### 9. claude-dependabot-review
+Dependabot の依存更新 PR について、CI（テスト）が緑でも見逃しがちな「ランタイム挙動の変化・deprecation」を CHANGELOG ベースで Claude に評価させ、PR へ要約コメントを 1 本残すワークフローです。検出/分類は Dependabot に、「壊れたか」は CI に任せ、本WFは「緑でも危ういもの」を拾う役に徹します。言語・フレームワークには依存しません。
+
+**使用方法:**
+
+再利用可能ワークフローでは `workflow_run` トリガーを定義できないため、トリガー（`on: workflow_run`）と発火条件（CI 成功 & Dependabot 起点）は呼び出し側で定義し、`head_sha` を渡します。
+
+```yaml
+name: Claude Dependabot Review
+on:
+  workflow_run:
+    workflows: ["Test"]   # CI(テスト本体)のワークフロー名に合わせる
+    types: [completed]
+concurrency:
+  # 同一 head_branch の再実行で多重コメントを防ぐ
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+jobs:
+  dependabot-review:
+    # Dependabot 起点の PR、かつ CI が成功した場合のみ
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]'
+    uses: SonicGarden/workflows/.github/workflows/claude-dependabot-review.yml@main
+    with:
+      head_sha: ${{ github.event.workflow_run.head_sha }}
+    secrets:
+      # 以下どちらかが必須
+      claude_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+**パラメータ:**
+- `head_sha`: レビュー対象 PR の HEAD コミット SHA（必須。呼び出し側で `github.event.workflow_run.head_sha` を渡す）
+- `model`: 使用する Claude モデル（オプション、デフォルト: `sonnet`。空文字を明示指定するとアクション側のデフォルトになる）
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-24.04-arm`）
+
+**必要なシークレット:**
+- `claude_oauth_token`: Claude OAuth トークン（推奨）
+- `anthropic_api_key`: Anthropic API キー（claude_oauth_tokenがない場合のフォールバック）
+
+**前提:**
+- 呼び出し側の `workflows: ["Test"]` を、待ち受けたい CI ワークフローの `name` に合わせること
+- Dependabot が PR 本文に Release notes / Changelog を展開していること（一次ソースとして読む）
+
+**機能:**
+- CI（テスト）が緑でも見逃す「ランタイム挙動の変化・deprecation」を CHANGELOG ベースで評価
+- ベースブランチ（更新適用前の現状コード）のみを checkout し、信頼コンテキストに untrusted な PR HEAD を置かない
+- PR へのコメントは 1 本に集約（既存の Claude コメントを自動削除して重複を防止）
+- `head_sha` に紐づく open PR が見つからない場合はスキップ
 
 ## 使用例
 
