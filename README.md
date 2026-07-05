@@ -16,7 +16,9 @@ Reusable GitHub Actions workflows
 ## 利用可能なワークフロー
 
 ### 1. copytuner_deploy
-Copytune翻訳管理ツールへの翻訳情報をデプロイするワークフローです。
+
+<details>
+<summary>Copytune翻訳管理ツールへの翻訳情報をデプロイするワークフローです。</summary>
 
 **使用方法:**
 ```yaml
@@ -28,8 +30,12 @@ secrets:
 **必要なシークレット:**
 - `apiKey`: CopytunerのAPIキー
 
+</details>
+
 ### 2. gem_changelog
-Gemfile.lockの変更を検出し、更新されたgemのchangelogをPRコメントに投稿するワークフローです。
+
+<details>
+<summary>Gemfile.lockの変更を検出し、更新されたgemのchangelogをPRコメントに投稿するワークフローです。</summary>
 
 **使用方法:**
 ```yaml
@@ -41,16 +47,24 @@ secrets:
 **オプションのシークレット:**
 - `rubygemsToken`: RubyGems.orgのAPIトークン（スコープ: `Index rubygems`）
 
+</details>
+
 ### 3. new_gems
-Gemfileの変更を検出し、新しく追加されたgemをPRコメントに投稿するワークフローです。
+
+<details>
+<summary>Gemfileの変更を検出し、新しく追加されたgemをPRコメントに投稿するワークフローです。</summary>
 
 **使用方法:**
 ```yaml
 uses: SonicGarden/workflows/.github/workflows/new_gems.yml@main
 ```
 
+</details>
+
 ### 4. new_npm
-package.jsonの変更を検出し、新しく追加されたnpmパッケージをPRコメントに投稿するワークフローです。
+
+<details>
+<summary>package.jsonの変更を検出し、新しく追加されたnpmパッケージをPRコメントに投稿するワークフローです。</summary>
 
 **使用方法:**
 ```yaml
@@ -62,8 +76,12 @@ with:
 **パラメータ:**
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
 
+</details>
+
 ### 5. npm_changelog
-npm/yarnのロックファイルの変更を検出し、更新されたパッケージのchangelogをPRコメントに投稿するワークフローです。
+
+<details>
+<summary>npm/yarnのロックファイルの変更を検出し、更新されたパッケージのchangelogをPRコメントに投稿するワークフローです。</summary>
 
 **使用方法:**
 ```yaml
@@ -77,8 +95,12 @@ with:
 - `lockPath`: ロックファイルのパス（デフォルト: `yarn.lock`）
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
 
+</details>
+
 ### 6. staging_deploy
-指定されたブランチから staging ブランチへの自動デプロイPRを作成・管理するワークフローです。
+
+<details>
+<summary>指定されたブランチから staging ブランチへの自動デプロイPRを作成・管理するワークフローです。</summary>
 
 **使用方法:**
 ```yaml
@@ -120,8 +142,12 @@ with:
 
 これらの設定により、CIが全て通過した後に自動的にPRがマージされます。
 
+</details>
+
 ### 7. claude-review
-Claude Code を使用してPRの自動コードレビューを実行するワークフローです。
+
+<details>
+<summary>Claude Code を使用してPRの自動コードレビューを実行するワークフローです。</summary>
 
 **使用方法:**
 ```yaml
@@ -154,8 +180,12 @@ secrets:
 - 既存のClaude botコメントを自動削除して重複を防止
 - `[skip review]` がコミットメッセージに含まれている場合はレビューをスキップ
 
+</details>
+
 ### 8. heroku_deploy_notify
-Heroku-GitHub 自動デプロイ対象ブランチへの push を契機に、Heroku Platform API をポーリングしてリリースの完了/失敗を検知し、そのマージコミットに紐づく PR にデプロイ結果をコメントするワークフローです。デプロイ本体には介入しない外形監視です。
+
+<details>
+<summary>Heroku-GitHub 自動デプロイ対象ブランチへの push を契機に、Heroku Platform API をポーリングしてリリースの完了/失敗を検知し、そのマージコミットに紐づく PR にデプロイ結果をコメントするワークフローです。デプロイ本体には介入しない外形監視です。</summary>
 
 **使用方法:**
 
@@ -211,8 +241,12 @@ jobs:
 - マージコミットに紐づく PR にデプロイ結果（成功/失敗/タイムアウト）をコメント
 - PR コメントは `push` イベント時のみ（手動実行などでは誤爆防止でスキップ）
 
+</details>
+
 ### 9. claude-dependabot-review
-Dependabot の依存更新 PR について、CI（テスト）が緑でも見逃しがちな「ランタイム挙動の変化・deprecation」を CHANGELOG ベースで Claude に評価させ、PR へ要約コメントを 1 本残すワークフローです。検出/分類は Dependabot に、「壊れたか」は CI に任せ、本WFは「緑でも危ういもの」を拾う役に徹します。言語・フレームワークには依存しません。
+
+<details>
+<summary>Dependabot の依存更新 PR について、CI（テスト）が緑でも見逃しがちな「ランタイム挙動の変化・deprecation」を CHANGELOG ベースで Claude に評価させ、PR へ要約コメントを 1 本残すワークフローです。検出/分類は Dependabot に、「壊れたか」は CI に任せ、本WFは「緑でも危ういもの」を拾う役に徹します。言語・フレームワークには依存しません。</summary>
 
 **使用方法:**
 
@@ -263,20 +297,4 @@ jobs:
 - PR へのコメントは 1 本に集約（既存の Claude コメントを自動削除して重複を防止）
 - `head_sha` に紐づく open PR が見つからない場合はスキップ
 
-## 使用例
-
-他のリポジトリからこれらのワークフローを使用する場合は、`.github/workflows/` ディレクトリに以下のようなファイルを作成してください：
-
-```yaml
-name: Example Workflow
-on:
-  pull_request:
-    paths:
-      - 'Gemfile.lock'
-
-jobs:
-  gem-changelog:
-    uses: SonicGarden/workflows/.github/workflows/gem_changelog.yml@main
-    secrets:
-      rubygemsToken: ${{ secrets.RUBYGEMS_TOKEN }}
-```
+</details>
