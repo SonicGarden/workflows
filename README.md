@@ -12,7 +12,7 @@ Reusable GitHub Actions workflows
 - [claude-review](#7-claude-review) - Claude Codeによる自動コードレビュー
 - [heroku_deploy_notify](#8-heroku_deploy_notify) - Herokuデプロイ完了/失敗をPRに通知
 - [claude-dependabot-review](#9-claude-dependabot-review) - Dependabot更新PRをCI緑でも危うい観点でClaudeレビュー
-- [claude-review-plugin](#10-claude-review-plugin) - claude-pluginsのSkill方式によるClaude Code自動コードレビュー
+- [claude-review-cli](#10-claude-review-cli) - @aki77/claude-code-review CLIによるClaude Code自動コードレビュー
 
 ## 利用可能なワークフロー
 
@@ -300,10 +300,10 @@ jobs:
 
 </details>
 
-### 10. claude-review-plugin
+### 10. claude-review-cli
 
 <details>
-<summary>Claude Code の `code-review` プラグイン（`/code-review:pr-review` Skill）を使ってPRの自動コードレビューを実行するワークフローです。GitHub MCPツールを直接呼び出す `claude-review` とは異なり、Skill内でBash/git等を使ってdiffを取得する方式です。`/review` PRコメントによる再実行、`reviewed-by-claude` ラベルでの二重レビュー防止を備えています。</summary>
+<summary>`@aki77/claude-code-review` CLI を `npx` で実行してPRの自動コードレビューを行うワークフローです。GitHub MCPツールを直接呼び出す `claude-review` とは異なり、CLI が gh CLI 経由で diff を取得しレビューする方式です。`/review` PRコメントによる再実行、`reviewed-by-claude` ラベルでの二重レビュー防止を備えています。</summary>
 
 **使用方法:**
 
@@ -330,7 +330,7 @@ concurrency:
 
 jobs:
   claude-review:
-    uses: SonicGarden/workflows/.github/workflows/claude-review-plugin.yml@main
+    uses: SonicGarden/workflows/.github/workflows/claude-review-cli.yml@main
     secrets:
       # 以下どちらかが必須
       claude_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
@@ -338,9 +338,6 @@ jobs:
 ```
 
 **パラメータ:**
-- `plugin_ref`: `aki77/claude-plugins` の ref（オプション、デフォルト: `main`。ブランチ/タグ/SHAでバージョンをロック可能）
-- `additional_claude_args`: `claude_args` の末尾に追記する追加引数（オプション、デフォルト: `""`。モデル変更やallowedTools追加など）
-- `model`: 使用するClaudeモデル（オプション、デフォルトは `sonnet`。空文字を明示指定するとアクション側のデフォルトになる）
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-24.04-arm`）
 
 **必要なシークレット:**
@@ -348,7 +345,7 @@ jobs:
 - `anthropic_api_key`: Anthropic API キー（claude_oauth_tokenがない場合のフォールバック）
 
 **機能:**
-- `/code-review:pr-review` Skillによる自動レビュー（インラインコメント）
+- `@aki77/claude-code-review` CLIによる自動レビュー（インラインコメント）
 - PRコメントで `/review` と投稿すると再レビューを実行
 - `reviewed-by-claude` ラベルを自動作成・付与し、二重レビューを防止
 - 既存のClaude botコメントを自動削除して重複を防止
