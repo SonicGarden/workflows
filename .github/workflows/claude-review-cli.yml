@@ -76,7 +76,7 @@ jobs:
         run: git fetch origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
