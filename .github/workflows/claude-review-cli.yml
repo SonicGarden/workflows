@@ -100,7 +100,7 @@ jobs:
           noReply: "true"
           onlyNotMinimized: "true"
           includeOverallReviewComments: "true"
-          bodyContains: claude-code-review
+          bodyContains: "Claude Code Review"
 
       - name: Run Claude Code Review
         env:
