@@ -100,7 +100,7 @@ jobs:
           # NOTE: Skill と GitHub MCP（PR読み取り/コメント投稿）に限定
           claude_args: |
             ${{ inputs.model != '' && format('--model {0}', inputs.model) || '' }}
-            --allowedTools "Bash(gh:*),Grep,Glob,Read,Skill,WebFetch,mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__add_issue_comment"
+            --allowedTools "Bash(gh:*),Grep,Glob,Read,Write,Skill,WebFetch,mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__add_issue_comment"
           prompt: |
             あなたは Dependabot の依存更新 PR をレビューする。CI（テスト）は既に成功している。
             あなたの役割は「CI が緑でも見逃す」リスクだけに集中すること。テストが拾える破壊（型/ビルド/テスト失敗）は CI に任せ、再指摘しない。
@@ -124,5 +124,6 @@ jobs:
             - 推測で危険を煽らない。確証がない場合は「要確認」と明示する。
 
             コメント投稿:
-            - PRへのコメント投稿は必ず mcp__github__add_issue_comment ツールで行う。gh pr comment・一時ファイル経由（cat > file や --body-file）・Write ツールは使わない（allowedTools 外・シェル静的解析で拒否されるため）。
+            - PRへのコメント投稿は必ず mcp__github__add_issue_comment ツールで行う。gh pr comment は使わない（allowedTools 外・シェル静的解析で拒否されるため）。
+            - コメント本文が長くなる場合は、Write ツールで一時ファイルに下書きしてから、その内容を mcp__github__add_issue_comment の body 引数に渡してよい（一時ファイル自体をコメントとして投稿する動線ではない）。
             - これは人間が介在しない非対話のCI実行である。投稿前に確認・承認を求めず、判断が完了次第そのままコメントを投稿すること。
