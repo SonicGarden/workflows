@@ -28,7 +28,7 @@ jobs:
       - name: Check out Git repository
         uses: actions/checkout@v7
 
-      - uses: kzkn/rubygems-changelog-url-action@v2
+      - uses: kzkn/rubygems-changelog-url-action@e465910458be8fa448392318c1f6e4f70f3baef0
         with:
           githubToken: ${{ github.token }}
           rubygemsToken: ${{ secrets.rubygemsToken }}
