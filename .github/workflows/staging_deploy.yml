@@ -29,6 +29,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # NOTE: コミットメッセージのような外部由来のフリーテキストは run: に直接展開せず env 経由で受ける
+  #       （GitHub Actions injection 対策）。ブランチ名(inputs.*)とPR番号(数値のみ)は
+  #       呼び出し側が書くリテラルか数値限定のため直接展開のままとしている。
   create-staging-pr:
     runs-on: ${{ inputs.runs_on }}
     if: contains(github.event.head_commit.message, '[skip deploy]') == false
@@ -66,19 +69,27 @@ jobs:
       - name: Create Pull Request
         id: create-pr
         if: steps.check-pr.outputs.existing_pr == ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NOTE: untrusted input を run: に直接展開せず env 経由で受ける（GitHub Actions injection 対策）
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
         run: |
           # NOTE: GitHub CLIでPRを作成
-          pr_body="## デプロイ内容
+          cat <<EOF > pr_body.md
+          ## デプロイ内容
 
-          ${{ inputs.source_branch }}ブランチの最新の変更を${{ inputs.target_branch }}ブランチにデプロイします。
+          ${SOURCE_BRANCH}ブランチの最新の変更を${TARGET_BRANCH}ブランチにデプロイします。
 
           ### 変更内容
-          ${{ github.event.head_commit.message }}
+          ${COMMIT_MESSAGE}
 
           CIが全て通過したら、設定に応じて自動的にマージされます。
 
           ---
-          _このPRは自動生成されました_"
+          _このPRは自動生成されました_
+          EOF
 
           # NOTE: auto-deploy stagingラベルが存在しない場合は作成
           if ! gh label list --search "auto-deploy staging" --json name --jq '.[].name' | grep -q "auto-deploy staging"; then
@@ -90,18 +101,16 @@ jobs:
           current_date=$(date '+%Y-%m-%d %H:%M')
 
           pr_url=$(gh pr create \
-            --title "🚀 [$current_date] Deploy to ${{ inputs.target_branch }} from ${{ inputs.source_branch }}" \
-            --body "$pr_body" \
-            --base ${{ inputs.target_branch }} \
-            --head ${{ inputs.source_branch }} \
+            --title "🚀 [$current_date] Deploy to ${TARGET_BRANCH} from ${SOURCE_BRANCH}" \
+            --body-file pr_body.md \
+            --base "${TARGET_BRANCH}" \
+            --head "${SOURCE_BRANCH}" \
             --label "auto-deploy staging")
 
           # NOTE: PRのURLからPR番号を抽出
           pr_number=$(echo "$pr_url" | grep -oE '[0-9]+$')
           echo "pr_number=$pr_number" >> $GITHUB_OUTPUT
           echo "新しいPR #$pr_number を作成しました"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Enable auto-merge for new PR
         if: inputs.enable_auto_merge && steps.create-pr.outputs.pr_number != ''
@@ -123,24 +132,31 @@ jobs:
 
       - name: Update existing PR
         if: steps.check-pr.outputs.existing_pr != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NOTE: untrusted input を run: に直接展開せず env 経由で受ける（GitHub Actions injection 対策）
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          EXISTING_PR: ${{ steps.check-pr.outputs.existing_pr }}
         run: |
           # NOTE: 既存のPRの説明を最新のコミット情報で更新
-          pr_body="## デプロイ内容
+          cat <<EOF > pr_body.md
+          ## デプロイ内容
 
-          ${{ inputs.source_branch }}ブランチの最新の変更を${{ inputs.target_branch }}ブランチにデプロイします。
+          ${SOURCE_BRANCH}ブランチの最新の変更を${TARGET_BRANCH}ブランチにデプロイします。
 
           ### 最新の変更内容
-          ${{ github.event.head_commit.message }}
+          ${COMMIT_MESSAGE}
 
           CIが全て通過したら、設定に応じて自動的にマージされます。
 
           ---
-          _このPRは自動生成されました（最終更新: $(date '+%Y-%m-%d %H:%M:%S'))_"
+          _このPRは自動生成されました（最終更新: $(date '+%Y-%m-%d %H:%M:%S'))_
+          EOF
 
-          gh pr edit ${{ steps.check-pr.outputs.existing_pr }} --body "$pr_body"
-          echo "既存のPR #${{ steps.check-pr.outputs.existing_pr }} の説明を更新しました"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          gh pr edit "${EXISTING_PR}" --body-file pr_body.md
+          echo "既存のPR #${EXISTING_PR} の説明を更新しました"
 
   # NOTE: デプロイ後の通知ジョブ（オプション）
   notify-deployment:
