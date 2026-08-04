@@ -211,7 +211,7 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@v1.0.183
         env:
           # NOTE: 初期値の25000だと mcp__github__get_pull_request_files でトークン不足になるケースが頻繁に発生するため
           # SEE: https://docs.anthropic.com/ja/docs/claude-code/settings#%E7%92%B0%E5%A2%83%E5%A4%89%E6%95%B0
