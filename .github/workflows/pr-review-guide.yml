@@ -1,0 +1,404 @@
+name: PR Review Guide
+
+# PR ごとに「初見のレビュアー向け解説ページ(自己完結 HTML)」を生成し、artifact の
+# URL を PR 本文へ marker 方式で upsert する再利用可能ワークフロー。
+#
+# HTML の中身(図の設計・テンプレート・自己検証)は aki77/skills の pr-review-guide
+# スキルに委譲し、このワークフローは「スキルを起動する・成果物を置く・PR に貼る」
+# だけを担う。スキル側の SKILL.md が「アップロードや PR への投稿はワークフローの
+# 責務」と明示しているため、この分担は設計上の前提。
+#
+# NOTE: スキルは `--scope user`(~/.claude/skills/)へ入れる。claude-code-action は PR 上で
+#       動くとき .claude/ 等の SENSITIVE_PATHS を base の内容へ戻すので、project スコープに
+#       置くとその復元でスキルごと消えてしまう。
+#
+# NOTE: 生成物は RUNNER_TEMP へ書く。リポジトリ内に書くと作業ツリーが dirty になり、
+#       スキルの head 検証(git status --porcelain が空であることの確認)に落ちるうえ、
+#       リポジトリのフック(PostToolUse など)の対象にもなる。
+#
+# NOTE: ジョブを generate / publish に分けているのはトークン権限の分離のため。スキルは
+#       PR 本文・コミットメッセージ・issue 本文という「作成者が自由に書ける信頼できない
+#       テキスト」を読む。SKILL.md 自身が「allowed-tools はセキュリティ境界ではなく、
+#       本当の対策は CI 側でトークンを読み取り専用に絞ること」と述べている。副次的に
+#       「生成に失敗したらラベルが付かない」が needs によって構造的に保証され、次の push で
+#       自動的に再挑戦される。
+#
+# 呼び出し側が持つべきもの:
+# - トリガー(`pull_request` の types: [opened, synchronize, ready_for_review] と
+#   `issue_comment` の types: [created])。workflow_call ではこれらを定義できない。
+#   WARNING: types に edited を入れてはいけない。本ワークフロー自身が PR 本文を編集する
+#            ため無限ループになる。labeled も同様(publish がラベルを付ける)。
+# - `concurrency`(README の使用例に式ごと載せてある)。
+# - 呼び出し側 job の `permissions:`(contents: read / pull-requests: write / issues: write)。
+#   WARNING: これは必須。再利用可能ワークフローの job は呼び出し側 GITHUB_TOKEN を
+#            縮小しかできず拡大できないため、呼び出し側で write を与えないと publish が
+#            `gh label create` / `gh pr edit` で 403 になる。generate 側は自身の
+#            permissions で read のみへ絞り込むので、Claude に書き込み権限は渡らない。
+# - リポジトリ固有の除外条件(特定ブランチ間の PR を除外するなど)は呼び出し側 job の
+#   `if:` へ足す。
+
+on:
+  workflow_call:
+    inputs:
+      retention_days:
+        description: "生成した HTML artifact の保持日数（リポジトリ/Organization の上限を超えるとアップロードが失敗する）"
+        required: false
+        type: number
+        default: 7
+      runs_on:
+        description: "GitHub Actions runner to use"
+        required: false
+        type: string
+        default: "ubuntu-24.04-arm"
+    secrets:
+      claude_oauth_token:
+        required: false
+        description: Claude OAuth token for pr review guide
+      anthropic_api_key:
+        required: false
+        description: Anthropic API key for pr review guide
+
+jobs:
+  generate:
+    # /guide コメント経路はラベルに関係なく常に許可する(手動再実行の入口)。
+    # pull_request 経路は dependabot・draft・[skip guide]・review-guide-done ラベルを除外する。
+    # NOTE: /guide の判定に contains ではなく startsWith を使う。contains は部分一致なので
+    #       本文中の URL(.../docs/guide/... など)や「userguide」といった語だけで誤発火し、
+    #       無関係なコメントのたびに Claude の実行コストがかかる。呼び出し側の concurrency
+    #       group も同じ startsWith で判定する必要がある(README の使用例と揃えること。
+    #       片方だけ contains だと、誤発火したコメントが別 group に入って PR 単位の
+    #       同時実行制御が効かなくなる)。既存の claude-review-cli.yml の /review は
+    #       contains のままなので、ここだけ意図的に挙動が異なる(揃えるために戻さないこと)。
+    # NOTE: リポジトリ固有の除外条件(release-candidate -> main を対象外にする等)は
+    #       ここではなく呼び出し側 job の `if:` へ足す。
+    if: |
+      (
+        github.event.issue.pull_request &&
+        startsWith(github.event.comment.body, '/guide') &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      ) ||
+      (
+        github.event_name == 'pull_request' &&
+        github.actor != 'dependabot[bot]' &&
+        !github.event.pull_request.draft &&
+        !contains(github.event.pull_request.title, '[skip guide]') &&
+        !contains(join(github.event.pull_request.labels.*.name, ','), 'review-guide-done')
+      )
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: 30
+
+    # NOTE: このジョブには書き込みスコープを一切与えない。Claude が読むのは PR 作成者が
+    #       自由に書けるテキストであり、プロンプトインジェクションに対する実効的な境界は
+    #       --allowedTools の列挙ではなくトークンのスコープだけである(SKILL.md も同旨)。
+    #       書き込みは Claude が動かない publish ジョブに隔離している。
+    # NOTE: issues: read が必要なのは、明示的な permissions が「列挙しないスコープを none に
+    #       する」ため。これが無いと PR 本文が issue にリンクしているときの gh issue view
+    #       (SKILL.md 手順1)が private リポジトリで 403 になる。読み取りのみなので上記の
+    #       方針は崩れない。
+    # NOTE: ここに id-token: write を足してはいけない。当リポジトリの他の Claude 系
+    #       ワークフロー(claude-dependabot-review.yml など)は 1 ジョブに id-token: write を
+    #       与えているが、その雛形をここへ持ち込むとこのジョブの「読み取り専用」という
+    #       前提が崩れる(理由は Generate review guide (Claude) ステップの
+    #       github_token の WARNING を参照)。
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+
+    outputs:
+      generated: ${{ steps.check.outputs.generated }}
+      artifact_url: ${{ steps.upload.outputs.artifact-url }}
+      head_sha: ${{ steps.pr.outputs.sha || github.event.pull_request.head.sha }}
+      pr_number: ${{ github.event.pull_request.number || github.event.issue.number }}
+
+    steps:
+      # issue_comment のデフォルト checkout は default branch なので、gh pr view で
+      # head sha を明示解決して checkout に渡す。
+      - name: Resolve PR info (issue_comment only)
+        id: pr
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr view "$PR_NUMBER" \
+            --repo "$REPO" \
+            --json headRefOid \
+            --jq '"sha=" + .headRefOid' \
+            >> "$GITHUB_OUTPUT"
+
+      # WARNING: ref に head SHA を明示するのは必須。pull_request の既定チェックアウトは
+      #          merge ref であり、スキルの「git rev-parse HEAD == headRefOid」検証に落ちて
+      #          ガイドが生成されない。
+      # NOTE: fetch-depth は既定(1)でよい。スキルは diff を gh 経由で取得し、ローカル履歴に
+      #       依存しない。
+      - name: Check out PR head
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.pr.outputs.sha || github.event.pull_request.head.sha }}
+
+      # fork からの PR では secrets が渡らないため、後続を静かに skip するためのゲート。
+      # NOTE: 認証情報が無いときに fail-fast にせず silent skip を維持しているのは、
+      #       fork PR で必ず赤くなるのを避けるため(fork では secrets が渡らないのが
+      #       正常であり、設定漏れではない)。生成されなければラベルも付かないので、
+      #       secrets が揃ってから push すれば自動的に再挑戦される。
+      - name: Check credentials
+        id: auth
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.claude_oauth_token }}
+          ANTHROPIC_API_KEY: ${{ secrets.anthropic_api_key }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$CLAUDE_CODE_OAUTH_TOKEN" || -n "$ANTHROPIC_API_KEY" ]]; then
+            echo "has_credentials=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_credentials=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # NOTE: --scope user は必須(理由はファイル冒頭の NOTE を参照)。
+      # NOTE: pin SHA は Dependabot の管理外(gh skill install --pin を見ない)なので手動更新。
+      #       更新時は SKILL.md の allowed-tools と後続ステップの --allowedTools の同期を必ず
+      #       確認する(列挙漏れは headless では「プロンプトされず拒否」になり、機能不全に
+      #       直結する)。
+      # NOTE: continue-on-error は付けない。スキルが入らなければ後続は必ず無意味なので、
+      #       ここは落ちて気付くべき箇所。
+      - name: Install pr-review-guide skill
+        id: install
+        if: ${{ steps.auth.outputs.has_credentials == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # gh skill は preview 機能(gh >= 2.92 が必要)なのでバージョンをログに残す。
+          gh --version
+          gh skill install aki77/skills github/pr-review-guide --agent claude-code --scope user --pin 0617dec85f98b202ee9a8edfed4d64a992e64085 --force
+          verify_sh="$HOME/.claude/skills/pr-review-guide/scripts/verify.sh"
+          # NOTE: 展開済みの絶対パスを output に出すのは、Bash(...) の許可がリテラルの
+          #       前置一致であり、モデルが ~/ ではなく /home/runner/... を発行しうるため。
+          #       両形式を --allowedTools に登録するのに使う。
+          echo "verify_sh=${verify_sh}" >> "$GITHUB_OUTPUT"
+          test -f "$HOME/.claude/skills/pr-review-guide/SKILL.md"
+          # NOTE: chmod が必要なのは、gh skill install が git の実行ビットを保存せず
+          #       (上流は 100755 だが 644 で書き出される)、SKILL.md も本ワークフローの
+          #       Check generated output も verify.sh を直接実行するため。
+          chmod +x "$verify_sh"
+          test -x "$verify_sh"
+
+      # NOTE: prompt は 1 行のプレーンスカラーにする。ブロックスカラー(|)だと末尾改行が
+      #       付き、説明文を足すと 2 行目以降も $ARGUMENTS に流れ込んで出力パスの解析が
+      #       壊れる。PR 番号の明示も必須(detached HEAD ではブランチから解決できない)。
+      # NOTE: --model は渡さない(スキルの frontmatter が model を持つ)。
+      # NOTE: id を付けていないのは意図的。この step の outputs / outcome は参照しない
+      #       (理由は後続の Check generated output の WARNING を参照)。
+      # NOTE: action は SHA ではなくタグ(@v1)で pin している(当リポジトリは Dependabot daily で
+      #       タグを更新する方針)。ただし後述の github_token の挙動と claude_args の
+      #       トークン解析は v1.0.216 で確認したものなので、@v1 の指す先が動いて壊れた場合は
+      #       まずこの 2 点を疑うこと。
+      - name: Generate review guide (Claude)
+        if: ${{ steps.auth.outputs.has_credentials == 'true' }}
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          prompt: /pr-review-guide ${{ github.event.pull_request.number || github.event.issue.number }} ${{ runner.temp }}/review-guide.html
+          claude_code_oauth_token: ${{ secrets.claude_oauth_token }}
+          anthropic_api_key: ${{ secrets.claude_oauth_token != '' && '' || secrets.anthropic_api_key }}
+          display_report: true
+          # WARNING: github_token の明示指定を外してはいけない。省略すると action は OIDC
+          #          トークンを Claude GitHub App の installation token に交換する経路に入り、
+          #          (1) id-token: write が無いので「Could not fetch an OIDC token. Did you
+          #          remember to add `id-token: write`」で失敗し、(2) エラーメッセージに従って
+          #          id-token: write を足すと、App token は contents/pull_requests/issues が
+          #          既定で write であり job の permissions を無視するため、このジョブの
+          #          「読み取り専用」という前提(上の permissions の NOTE)が静かに崩れる。
+          #          github_token を渡すと action 側は OVERRIDE_GITHUB_TOKEN として早期
+          #          return し、交換を行わずこのジョブのスコープのまま動く。
+          github_token: ${{ github.token }}
+          # NOTE: --allowedTools はカンマ区切りの 1 文字列にせず、1 ルール 1 トークンで並べる
+          #       (claude_args は shell-quote で解釈され、allowedTools は続く非フラグ
+          #       トークンをすべて吸収する)。シングルクォート包みが検証済みの経路なので、
+          #       Bash(gh api "repos/:*) のリテラルなダブルクォートもエスケープ無しで書ける。
+          # NOTE: --add-dir は --allowedTools より前に置く。後ろに置くとトークンとして
+          #       吸収されてしまう。cwd 外(RUNNER_TEMP)への書き込みに必要。
+          # NOTE: verify.sh のパスをチルダ形式と展開済み絶対パスの 2 通り登録するのは、
+          #       Bash(...) がリテラルの前置一致であり、SKILL.md がスキルディレクトリを
+          #       解決させる書き方のためモデルがどちらの形でも発行しうるから。片方だけだと
+          #       検証が拒否され generated=false になる。
+          claude_args: |
+            --add-dir ${{ runner.temp }}
+            --allowedTools Skill Read Write Grep Glob
+              'Bash(gh pr view:*)'
+              'Bash(gh pr diff:*)'
+              'Bash(gh issue view:*)'
+              'Bash(gh api repos/:*)'
+              'Bash(gh api "repos/:*)'
+              'Bash(git rev-parse:*)'
+              'Bash(git status:*)'
+              'Bash(date:*)'
+              'Bash(~/.claude/skills/pr-review-guide/scripts/verify.sh:*)'
+              'Bash(${{ steps.install.outputs.verify_sh }}:*)'
+
+      # WARNING: claude-code-action の exit code は成否の判定に使えない。Claude が指示を
+      #          達成できなくても exit 0 することがあり(逆に認証失敗などでは exit 1 する)、
+      #          いずれも continue-on-error に吸われる。前 step に id を付けて outcome を
+      #          見ても不十分なので、成果物 HTML の存在と verify.sh の検証結果だけから導出する。
+      # NOTE: 生成できなかった場合は警告のみ出して exit 0(job は緑)。ラベルが付かないので
+      #       次の push で自動的に再挑戦される。
+      - name: Check generated output
+        id: check
+        if: ${{ steps.auth.outputs.has_credentials == 'true' }}
+        env:
+          HTML_PATH: ${{ runner.temp }}/review-guide.html
+          VERIFY_SH: ${{ steps.install.outputs.verify_sh }}
+        run: |
+          set -euo pipefail
+          if [[ ! -s "$HTML_PATH" ]]; then
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::レビューガイドの HTML が生成されませんでした。ラベルを付けずに終了します(次の push で再挑戦されます)。"
+            exit 0
+          fi
+          # 壊れた HTML のリンクを PR に貼らないため、スキルの検証スクリプトを独立に実行する。
+          # NOTE: if ! で包むのは、set -e が generated=false の出力前に job を落とさないため。
+          if ! "$VERIFY_SH" "$HTML_PATH"; then
+            echo "generated=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::生成された HTML が verify.sh の検証に失敗しました。PR には貼りません。"
+            exit 0
+          fi
+          echo "generated=true" >> "$GITHUB_OUTPUT"
+
+      # NOTE: archive: false で単一 HTML を zip 化せずアップロードし、artifact の URL を
+      #       ブラウザでそのまま表示できるようにする。この指定時は name 入力が無視される
+      #       ため指定しない。
+      - name: Upload review guide artifact
+        id: upload
+        if: ${{ steps.check.outputs.generated == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/review-guide.html
+          archive: false
+          overwrite: true
+          retention-days: ${{ inputs.retention_days }}
+          if-no-files-found: error
+
+  publish:
+    needs: generate
+    # NOTE: `== 'true'` を `!= 'false'` 等へ「直さない」こと。fork 経路では Check credentials が
+    #       false を返して check step 自体が skip され、generated は 'false' ではなく空文字に
+    #       なる。空文字を弾く必要があるので、真を明示比較する今の形が正しい。
+    if: ${{ needs.generate.outputs.generated == 'true' && needs.generate.outputs.artifact_url != '' }}
+    runs-on: ${{ inputs.runs_on }}
+    timeout-minutes: 5
+
+    # NOTE: ラベル操作(gh label create / gh pr edit --add-label)には issues: write が要る
+    #       (ラベルは issues/PR 共通リソースで issues スコープで制御されるため、
+    #       pull-requests: write だけでは 403 になる)。このジョブでは Claude を動かさないので、
+    #       書き込み権限を信頼できないテキストの読み手に渡すことにはならない。
+    # WARNING: 呼び出し側 job にも同じ権限が必要。再利用可能ワークフローの job は
+    #          呼び出し側 GITHUB_TOKEN を縮小しかできず拡大できないため、ここに write を
+    #          書いても呼び出し側が read しか渡していなければ 403 になる。
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    # NOTE: checkout は不要。upsert をインライン化したのでリポジトリのファイルを一切
+    #       必要とせず、gh は runner 標準搭載。PR のコードを一切チェックアウトせずに
+    #       書き込み権限を使う形になり、権限分離としても素直になる。
+    # NOTE: GH_REPO を置くと、checkout していない(= ローカルリポジトリが無い)環境でも
+    #       gh がリポジトリを解決できるため、各コマンドの --repo 指定が不要になる。
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ needs.generate.outputs.pr_number }}
+
+    steps:
+      - name: Ensure review-guide-done label exists
+        run: |
+          set -euo pipefail
+          gh label create "review-guide-done" \
+            --color "1d76db" \
+            --description "レビューガイド生成済み(push での自動再発動を止める)" \
+            --force
+
+      # NOTE: 本文の取得に --jq .body を使わない。jq は出力に改行を足し、シェルの $(...) は
+      #       末尾改行を落とすため、いずれも本文のバイト列を保てない。JSON をそのまま python に
+      #       渡せば API が返した文字列と完全に一致する。
+      # NOTE: upsert のロジックは別ファイルへ切り出さず 1 ステップに収めている。再利用可能
+      #       ワークフローとして呼ばれるとき、呼び出し側リポジトリには当リポジトリが
+      #       checkout されないため sidecar の .py を参照できない。インライン化は好みではなく
+      #       必須条件。
+      - name: Upsert review guide block into PR body
+        env:
+          # NOTE: 信頼できない値・モデル出力をスクリプト本文に展開せず env 経由で渡す
+          #       (リポジトリ共通の方針。vrt.yml も同じ形を採る)。python 側は os.environ しか
+          #       見ないので、${{ }} を python ソースへ差し込む経路が存在しない。
+          ARTIFACT_URL: ${{ needs.generate.outputs.artifact_url }}
+          HEAD_SHA: ${{ needs.generate.outputs.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          # NOTE: upload-artifact の retention-days と同じ input を参照する。PR 本文の文言を
+          #       リテラルで書くと、input を変えたときに表示と実態がずれる。
+          RETENTION_DAYS: ${{ inputs.retention_days }}
+          # NOTE: 書き出し先はここだけで定義し、python と gh pr edit の両方から同じ env を
+          #       参照する(シェル変数と env で二重に持つと片方の書き換えでパスがずれる)。
+          OUT_FILE: ${{ runner.temp }}/new-body.md
+        run: |
+          set -euo pipefail
+          script="${RUNNER_TEMP}/upsert-pr-body.py"
+
+          # NOTE: python をファイルへ書き出してから実行する。`python3 - <<'PY'` はスクリプト
+          #       自体を stdin から読むため、PR の JSON を stdin でパイプする経路と衝突する
+          #       (json.load(sys.stdin) が EOF を読む)。クォート付きヒアドキュメントで
+          #       シェルの変数展開・引用符の入れ子を避けたまま、stdin をデータ用に空けるための形。
+          cat > "$script" <<'PY'
+          import json, os, re, sys
+
+          START = "<!-- start pr-review-guide -->"
+          END = "<!-- end pr-review-guide -->"
+          # NOTE: 非貪欲マッチで、marker 対が複数あっても最初の1組だけを対象にする
+          PATTERN = re.compile(re.escape(START) + r"[\s\S]*?" + re.escape(END))
+
+          # NOTE: head SHA を載せるのは、レビュアーが「このガイドは最新の push に対応して
+          #       いるか」を判断する唯一の手段だから。保持期間を明記するのは、期限切れの
+          #       リンクを踏んだ人が「壊れている」と誤解しないため。
+          block = "\n".join([
+              START,
+              "## レビューガイド",
+              "",
+              f"初見のレビュアー向けの解説ページ: [review-guide.html]({os.environ['ARTIFACT_URL']})",
+              "",
+              f"- 対象 head SHA: `{os.environ['HEAD_SHA']}`",
+              f"- 生成した実行: [Actions run]({os.environ['RUN_URL']})",
+              f"- artifact の保持期間: {os.environ['RETENTION_DAYS']} 日(閲覧には GitHub ログインが必要)",
+              "",
+              "head SHA が現在の head と異なる場合、このガイドは古い。`/guide` とコメントすると再生成する。",
+              END,
+          ])
+
+          # NOTE: 本文が未設定の PR では body が JSON の null になる("" ではない)
+          body = json.load(sys.stdin).get("body") or ""
+
+          if PATTERN.search(body):
+              # NOTE: 置換文字列を lambda で渡す。文字列で渡すと re が \1 や \g<1> を
+              #       後方参照として解釈し、URL や本文中のバックスラッシュで壊れる
+              new = PATTERN.sub(lambda _m: block, body, count=1)
+          else:
+              new = f"{body}\n\n{block}" if body else block
+
+          # NOTE: 参照実装(changed-lines-number-action の report.ts)は最後に trim() するが
+          #       採用しない。trim() は marker の外側(本文冒頭・末尾の空白)を書き換えるため、
+          #       「作者の文章をバイト単位で保持する」という要件と直接矛盾する。
+          # NOTE: newline="" で改行変換を無効化する。GitHub の本文は CRLF を含むことがあり、
+          #       既定の universal newlines だと LF へ潰れて「本文全体が変更された」差分になる。
+          with open(os.environ["OUT_FILE"], "w", encoding="utf-8", newline="") as fh:
+              fh.write(new)
+          PY
+
+          gh api "repos/{owner}/{repo}/pulls/${PR_NUMBER}" | python3 "$script"
+          gh pr edit "$PR_NUMBER" --body-file "$OUT_FILE"
+
+      # NOTE: ラベル付与は必ず upsert の後に置く。順序を逆にすると upsert 失敗時にラベルだけが
+      #       残り、以降の push が job 先頭の if で弾かれて二度と生成されない(静かな取りこぼし)。
+      #       upsert が失敗すれば GitHub Actions の既定動作で後続ステップは実行されないため、
+      #       ここに if: success() を明示する必要はない。
+      - name: Add review-guide-done label
+        run: gh pr edit "$PR_NUMBER" --add-label "review-guide-done"

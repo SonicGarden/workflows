@@ -13,6 +13,7 @@ Reusable GitHub Actions workflows
 - [heroku_deploy_notify](#8-heroku_deploy_notify) - Herokuデプロイ完了/失敗をPRに通知
 - [claude-dependabot-review](#9-claude-dependabot-review) - Dependabot更新PRをCI緑でも危うい観点でClaudeレビュー
 - [claude-review-cli](#10-claude-review-cli) - @aki77/claude-code-review CLIによるClaude Code自動コードレビュー
+- [pr-review-guide](#11-pr-review-guide) - PRのレビューガイドHTMLを生成しPR本文にリンクをupsert
 
 ## 利用可能なワークフロー
 
@@ -355,5 +356,81 @@ jobs:
 **前提:**
 - 呼び出し側リポジトリに `pull_request` / `issue_comment` トリガーと `concurrency` を定義すること
 - リポジトリ固有の除外条件（特定ブランチ間のPRを除外するなど）が必要な場合は、呼び出し側のジョブに `if` 条件を追加すること
+
+</details>
+
+### 11. pr-review-guide
+
+<details>
+<summary>PR ごとに「初見のレビュアー向け解説ページ（自己完結 HTML）」を Claude に生成させ、artifact の URL を PR 本文へ marker 方式で upsert するワークフローです。Claude を読み取り専用トークンで動かす `generate` ジョブと、書き込みを行う `publish` ジョブに分離しています。`/guide` PRコメントによる再生成、`review-guide-done` ラベルでの二重生成防止を備えています。</summary>
+
+**使用方法:**
+
+再利用可能ワークフローでは `pull_request` / `issue_comment` トリガーを定義できないため、呼び出し側でトリガーと `concurrency` を定義します。
+
+```yaml
+name: PR Review Guide
+on:
+  pull_request:
+    # WARNING: types に edited を入れてはいけない。本ワークフロー自身が PR 本文を編集する
+    #          ため無限ループになる。labeled も同様(publish がラベルを付ける)。
+    types: [opened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  # NOTE: PR更新時の生成と/guideコメントは同じgroupで同時実行を防ぐ (例: PR Review Guide--pr-123)
+  # NOTE: 単なるコメントでもワークフロー自体は発動してしまうので、/guide以外のコメントは個別groupで無関係なキャンセルを防ぐ (例: PR Review Guide--comment-456)
+  group: |
+    ${{
+      github.event_name == 'pull_request' && format('{0}--pr-{1}', github.workflow, github.event.pull_request.number) ||
+      startsWith(github.event.comment.body, '/guide') && format('{0}--pr-{1}', github.workflow, github.event.issue.number) ||
+      format('{0}--comment-{1}', github.workflow, github.event.comment.id)
+    }}
+  cancel-in-progress: true
+
+jobs:
+  pr-review-guide:
+    # WARNING: この permissions ブロックは必須。再利用可能ワークフローの job は呼び出し側の
+    #          GITHUB_TOKEN を縮小しかできず拡大できないため、ここで write を渡さないと
+    #          publish ジョブが `gh label create` / `gh pr edit` で 403 になる。
+    #          Claude を動かす generate ジョブは自身の permissions で read のみへ絞り込むので、
+    #          ここで write を渡しても Claude に書き込み権限は渡らない。
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    uses: SonicGarden/workflows/.github/workflows/pr-review-guide.yml@main
+    secrets:
+      # 以下どちらかが必須
+      claude_oauth_token: ${{ secrets.CLAUDE_OAUTH_TOKEN }}
+      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+**パラメータ:**
+- `retention_days`: 生成した HTML artifact の保持日数（デフォルト: `7`）。PR 本文に表示する保持期間の文言も同じ値から生成されます
+- `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-24.04-arm`）
+
+**必要なシークレット:**
+- `claude_oauth_token`: Claude OAuth トークン（推奨）
+- `anthropic_api_key`: Anthropic API キー（claude_oauth_tokenがない場合のフォールバック）
+
+**機能:**
+- `aki77/skills` の `pr-review-guide` スキルで、初見のレビュアー向け解説ページ（自己完結 HTML）を生成
+- 生成した HTML を zip 化せず単一ファイルの artifact としてアップロードし、ブラウザでそのまま表示可能
+- artifact の URL を PR 本文へ marker 方式で upsert（作者の文章はバイト単位で保持し、再実行しても重複しない）
+- Claude を動かす `generate` ジョブは読み取り専用トークンで実行し、書き込みは Claude が動かない `publish` ジョブに隔離
+- PRコメントで `/guide` と投稿すると再生成を実行（OWNER / MEMBER / COLLABORATOR のみ）
+- `review-guide-done` ラベルを自動作成・付与し、二重生成を防止
+- 生成に失敗した場合はラベルを付けずに終了し、次の push で自動的に再挑戦
+- ドラフトPR、`[skip guide]` を含むタイトル、Dependabot起点のPRは自動的にスキップ
+- fork PR では secrets が渡らないため、ジョブを緑のまま静かにスキップ
+
+**前提:**
+- 呼び出し側リポジトリに `pull_request` / `issue_comment` トリガーと `concurrency` を定義すること
+- 呼び出し側ジョブに `permissions:`（`contents: read` / `pull-requests: write` / `issues: write`）を定義すること。再利用可能ワークフローは呼び出し側の権限を縮小しかできないため、これが無いと `publish` が 403 になる
+- トリガーの `types` に `edited` / `labeled` を含めないこと。本ワークフロー自身が PR 本文とラベルを更新するため無限ループになる
+- リポジトリ固有の除外条件（特定ブランチ間のPRを除外するなど）が必要な場合は、呼び出し側のジョブに `if` 条件を追加すること
+- runner に `gh` 2.92 以上が必要（スキル導入に使う `gh skill install` が preview 機能。GitHub ホストランナーは条件を満たす）
 
 </details>
