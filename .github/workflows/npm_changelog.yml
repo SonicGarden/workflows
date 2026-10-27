@@ -21,7 +21,7 @@ jobs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
       - id: skip_check
-        uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578
+        uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578 # v5.3.2
         with:
           paths: '["**/yarn.lock", "**/package-lock.json", "**/pnpm-lock.yaml"]'
 
@@ -33,9 +33,9 @@ jobs:
 
     steps:
       - name: Check out Git repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: kzkn/npm-changelog-url-action@v2
+      - uses: kzkn/npm-changelog-url-action@e802496afc7b7579b56083918ca00bc26d23a3ba # v2.1.0
         with:
           githubToken: ${{ github.token }}
           lockPath: ${{ inputs.lockPath }}
