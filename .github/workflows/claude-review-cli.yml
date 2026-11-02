@@ -58,7 +58,7 @@ jobs:
             >> "$GITHUB_OUTPUT"
 
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           token: ${{ github.token }}
           fetch-depth: 0
@@ -76,7 +76,7 @@ jobs:
         run: git fetch origin "$BASE_REF:refs/remotes/origin/$BASE_REF"
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        uses: actions/setup-node@v7.1.0
         with:
           node-version: 24
 
@@ -93,7 +93,7 @@ jobs:
       # NOTE: @aki77/claude-code-review CLIはgh CLI経由でコメント投稿するため、投稿者名義が
       # claude[bot]ではなくgithub-actions[bot]になる。過去コメント削除もそれに合わせて
       # usernamesをgithub-actions[bot]に変更し、bodyContainsで対象コメントを絞り込む
-      - uses: aki77/delete-pr-comments-action@56cee8fd1c739989119d537dd2e781fd30c15b54 # v3.2.0
+      - uses: aki77/delete-pr-comments-action@v3.2.0
         with:
           token: ${{ github.token }}
           usernames: github-actions[bot]

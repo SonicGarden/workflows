@@ -51,7 +51,7 @@ jobs:
       #       目的は「この更新が今のコードにどう影響するか」の調査なので、現状コードを grep/Read できれば十分。
       #       Dependabot が書き換えた PR HEAD は checkout しない＝信頼コンテキストで untrusted コードを置かない。
       - name: Checkout base branch
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           token: ${{ github.token }}
 
@@ -78,7 +78,7 @@ jobs:
       # NOTE: 前回の本WFコメントを消して sticky 的に1本に保つ（claude-review.yml と同じ慣行）
       - name: Delete previous comments
         if: steps.pr.outputs.found == 'true'
-        uses: aki77/delete-pr-comments-action@56cee8fd1c739989119d537dd2e781fd30c15b54 # v3.2.0
+        uses: aki77/delete-pr-comments-action@v3.2.0
         with:
           token: ${{ github.token }}
           pullRequestNumber: ${{ steps.pr.outputs.number }}
@@ -89,7 +89,7 @@ jobs:
 
       - name: Run Claude Dependabot Review
         if: steps.pr.outputs.found == 'true'
-        uses: anthropics/claude-code-action@8041f1d17e0e7d2f2cfe35002962e9f26237c0bb # v1.0.263
+        uses: anthropics/claude-code-action@v1.0.263
         with:
           claude_code_oauth_token: ${{ secrets.claude_oauth_token }}
           anthropic_api_key: ${{ secrets.claude_oauth_token != '' && '' || secrets.anthropic_api_key }}

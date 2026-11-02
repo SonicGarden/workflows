@@ -42,7 +42,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@v7.0.1
         with:
           token: ${{ github.token }}
           fetch-depth: 0
@@ -117,7 +117,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-      - uses: aki77/delete-pr-comments-action@56cee8fd1c739989119d537dd2e781fd30c15b54 # v3.2.0
+      - uses: aki77/delete-pr-comments-action@v3.2.0
         if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
         with:
           token: ${{ github.token }}
@@ -127,7 +127,7 @@ jobs:
           includeOverallReviewComments: "true"
 
       - name: Get existing Claude comments
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: actions/github-script@v9.0.0
         with:
           script: |
             const query = `query($owner: String!, $repo: String!, $number: Int!) {
@@ -211,7 +211,7 @@ jobs:
       - name: Run Claude Code Review
         id: claude-review
         if: steps.check-skip-message.outputs.skip != 'true' && steps.check-minimum-lines.outputs.should_skip != 'true'
-        uses: anthropics/claude-code-action@8041f1d17e0e7d2f2cfe35002962e9f26237c0bb # v1.0.263
+        uses: anthropics/claude-code-action@v1.0.263
         env:
           # NOTE: 初期値の25000だと mcp__github__get_pull_request_files でトークン不足になるケースが頻繁に発生するため
           # SEE: https://docs.anthropic.com/ja/docs/claude-code/settings#%E7%92%B0%E5%A2%83%E5%A4%89%E6%95%B0
