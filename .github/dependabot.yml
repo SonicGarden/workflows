@@ -4,3 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: daily
+    # 乗っ取られたアカウントから出された悪意のある版は、たいてい数日で見つかって取り下げられる。
+    # 公開直後の版をすぐ取り込まないよう、公開から 7 日たった版だけを上げる。
+    cooldown:
+      default-days: 7
