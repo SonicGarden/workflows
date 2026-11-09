@@ -21,7 +21,7 @@ jobs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
       - name: Migration notice
-        run: echo "::warning title=移行のお願い::npm_changelog は呼び出し側リポジトリへのべた書きへの移行を推奨しています。actions.lock で依存 action を固定できるようになります。手順は https://github.com/SonicGarden/workflows#5-npm_changelog を参照してください。"
+        run: echo "::warning title=移行のお願い::npm_changelog は呼び出し側リポジトリへのべた書きへの移行を推奨しています。2027/02/28 以降はこのリポジトリのワークフローを読み込めなくなります。actions.lock で依存 action を固定できるようになります。手順は https://github.com/SonicGarden/workflows#5-npm_changelog を参照してください。"
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578
         with:
