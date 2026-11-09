@@ -15,6 +15,8 @@ jobs:
     outputs:
       should_skip: ${{ steps.skip_check.outputs.should_skip }}
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行のお願い::new_npm は呼び出し側リポジトリへのべた書きへの移行を推奨しています。actions.lock で依存 action を固定できるようになります。手順は https://github.com/SonicGarden/workflows#4-new_npm を参照してください。"
       - id: skip_check
         uses: fkirc/skip-duplicate-actions@b974a9395958c231af965b70070979a577efa578
         with:

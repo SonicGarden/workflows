@@ -13,6 +13,9 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行のお願い::copytuner_deploy は呼び出し側リポジトリへのべた書きへの移行を推奨しています。actions.lock で依存 action を固定できるようになります。手順は https://github.com/SonicGarden/workflows#1-copytuner_deploy を参照してください。"
+
       - uses: actions/checkout@v7
 
       - uses: ruby/setup-ruby@v1
