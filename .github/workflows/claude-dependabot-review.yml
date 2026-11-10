@@ -47,6 +47,9 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行してください::claude-dependabot-review は 2027/02/28 以降、このリポジトリから読み込めなくなります。それまでに SonicGarden/composite-actions/claude-dependabot-review へ移行してください。手順は https://github.com/SonicGarden/composite-actions/tree/main#claude-dependabot-review を参照してください。"
+
       # NOTE: ベースブランチ（更新適用前の現状コード）を checkout する。
       #       目的は「この更新が今のコードにどう影響するか」の調査なので、現状コードを grep/Read できれば十分。
       #       Dependabot が書き換えた PR HEAD は checkout しない＝信頼コンテキストで untrusted コードを置かない。
@@ -118,6 +121,11 @@ jobs:
             4. このリポジトリのコードに実際に影響しうるかを判断する。作業ディレクトリにベースブランチ（更新適用前の現状コード）が checkout 済みなので、Grep/Glob/Read で該当パッケージの import や非推奨/削除予定 API の使用箇所を直接確認する。
 
             出力（PR へコメント1本、日本語、簡潔に）:
+            - コメントの先頭に、次の警告文を一字一句変えずにそのまま入れる（全て問題なしの場合も必ず入れる）:
+
+              > [!WARNING]
+              > このレビューは `SonicGarden/workflows` の `claude-dependabot-review.yml` で実行されています。2027/02/28 以降このリポジトリから読み込めなくなるため、それまでに [SonicGarden/composite-actions/claude-dependabot-review](https://github.com/SonicGarden/composite-actions/tree/main#claude-dependabot-review) へ移行してください。
+
             - 各パッケージ1行サマリ表: | パッケージ | 旧→新 | 挙動変化 | deprecation | このリポジトリへの影響 |
             - 「影響あり」のものだけ、確認/対応のポイントを箇条書きで補足する。
             - 全て問題なければ「CI（テスト）緑。CHANGELOG上も挙動変化/deprecationの懸念なし。」と明記する。
