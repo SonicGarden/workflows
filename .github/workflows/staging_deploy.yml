@@ -40,6 +40,9 @@ jobs:
       pull-requests: write
 
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行してください::staging_deploy は 2027/02/28 以降、このリポジトリから読み込めなくなります。それまでに SonicGarden/composite-actions/staging-deploy へ移行してください。手順は https://github.com/SonicGarden/composite-actions/tree/main/staging-deploy を参照してください。"
+
       - name: Check out Git repository
         uses: actions/checkout@v7
         with:
@@ -78,6 +81,9 @@ jobs:
         run: |
           # NOTE: GitHub CLIでPRを作成
           cat <<EOF > pr_body.md
+          > [!WARNING]
+          > このPRは SonicGarden/workflows の staging_deploy.yml で作成されています。2027/02/28 以降このリポジトリから読み込めなくなるため、それまでに [SonicGarden/composite-actions/staging-deploy](https://github.com/SonicGarden/composite-actions/tree/main/staging-deploy) へ移行してください。
+
           ## デプロイ内容
 
           ${SOURCE_BRANCH}ブランチの最新の変更を${TARGET_BRANCH}ブランチにデプロイします。
@@ -142,6 +148,9 @@ jobs:
         run: |
           # NOTE: 既存のPRの説明を最新のコミット情報で更新
           cat <<EOF > pr_body.md
+          > [!WARNING]
+          > このPRは SonicGarden/workflows の staging_deploy.yml で作成されています。2027/02/28 以降このリポジトリから読み込めなくなるため、それまでに [SonicGarden/composite-actions/staging-deploy](https://github.com/SonicGarden/composite-actions/tree/main/staging-deploy) へ移行してください。
+
           ## デプロイ内容
 
           ${SOURCE_BRANCH}ブランチの最新の変更を${TARGET_BRANCH}ブランチにデプロイします。

@@ -268,6 +268,13 @@ jobs:
 
 ### 6. staging_deploy
 
+**2027/02/28 以降、このリポジトリから読み込めなくなります**。それまでに [SonicGarden/composite-actions の staging-deploy](https://github.com/SonicGarden/composite-actions/tree/main/staging-deploy) へ移行してください。移行時の主な変更点:
+
+- `uses:` を job レベルから step レベル（`SonicGarden/composite-actions/staging-deploy@main`）に変更し、`runs-on`（`runs_on` input は廃止）/ `permissions` / `concurrency` を呼び出し側の job・ワークフローに書く
+- `[skip deploy]` によるスキップは呼び出し側 job の `if: contains(github.event.head_commit.message, '[skip deploy]') == false` で行う
+- `enable_auto_merge` は文字列（`'true'` / `'false'`）で渡す
+- notify-deployment ジョブは廃止（ジョブの成否で判別できるため）
+
 <details>
 <summary>指定されたブランチから staging ブランチへの自動デプロイPRを作成・管理するワークフローです。</summary>
 
