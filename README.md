@@ -360,6 +360,12 @@ secrets:
 
 ### 8. heroku_deploy_notify
 
+**2027/02/28 以降、このリポジトリから読み込めなくなります**。それまでに [SonicGarden/composite-actions の heroku-deploy-notify](https://github.com/SonicGarden/composite-actions/tree/main/heroku-deploy-notify) へ移行してください。移行時の主な変更点:
+
+- `uses:` を job レベルから step レベル（`SonicGarden/composite-actions/heroku-deploy-notify@main`）に変更し、`runs-on`（`ubuntu-slim`）/ `timeout-minutes`（`15`）/ `permissions` を呼び出し側の job に書く
+- `secrets:` の `heroku_api_key` は `with:` で渡す
+- その他の input 名・デフォルト値は変わらない（ON/OFF は従来どおり文字列 `'true'` / `'false'`）
+
 <details>
 <summary>Heroku-GitHub 自動デプロイ対象ブランチへの push を契機に、Heroku Platform API をポーリングしてリリースの完了/失敗を検知し、そのマージコミットに紐づく PR にデプロイ結果をコメントするワークフローです。デプロイ本体には介入しない外形監視です。</summary>
 
