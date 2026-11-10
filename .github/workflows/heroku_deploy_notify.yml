@@ -78,6 +78,9 @@ jobs:
       run:
         shell: bash
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行してください::heroku_deploy_notify は 2027/02/28 以降、このリポジトリから読み込めなくなります。それまでに SonicGarden/composite-actions/heroku-deploy-notify へ移行してください。手順は https://github.com/SonicGarden/composite-actions/tree/main/heroku-deploy-notify を参照してください。"
+
       # 1) 入力から Heroku アプリ名・環境名・対象 SHA を決定
       - name: Resolve target
         id: resolve
@@ -296,6 +299,14 @@ jobs:
             details="$(printf '%s\n' '' '<details><summary>リリースログ（末尾のみ）</summary>' '' '````' "$RELEASE_LOG" '````' '' '</details>')"
             body="${body}
           ${details}"
+          fi
+          # composite action への移行 warning を本文の先頭に付ける（通知する場合のみ）。
+          # NOTE: 上の details と同じ理由で、YAML ブロックスカラのインデントを混入させないため printf で組み立てる。
+          if [[ -n "$body" ]]; then
+            warning="$(printf '%s\n' '> [!WARNING]' '> このコメントは SonicGarden/workflows の heroku_deploy_notify.yml で投稿されています。2027/02/28 以降このリポジトリから読み込めなくなるため、それまでに [SonicGarden/composite-actions/heroku-deploy-notify](https://github.com/SonicGarden/composite-actions/tree/main/heroku-deploy-notify) へ移行してください。')"
+            body="${warning}
+
+          ${body}"
           fi
           if [[ -n "$body" ]]; then
             gh pr comment "$PR_NUMBER" --body "$body"
