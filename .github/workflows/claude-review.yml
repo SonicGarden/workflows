@@ -41,6 +41,9 @@ jobs:
       id-token: write
 
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行してください::claude-review は 2027/02/28 以降、このリポジトリから読み込めなくなります。それまでに SonicGarden/composite-actions/claude-review へ移行してください。手順は https://github.com/SonicGarden/composite-actions/tree/main/claude-review を参照してください。"
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -276,6 +279,10 @@ jobs:
                  - suggestionの行数は元の範囲と異なっても問題ない（削除や追加が可能）
                - コメント内で修正案を示す際は、```suggestion と ``` で囲んでください
             6. `mcp__github__submit_pending_pull_request_review`でイベントタイプ"COMMENT"として送信
+               - **重要**: 送信時のまとめコメント（総評 body）の先頭に、次の警告文を一字一句変えずにそのまま入れる（指摘がない場合も必ず入れる）:
+
+                 > [!WARNING]
+                 > このレビューは `SonicGarden/workflows` の `claude-review.yml` で実行されています。2027/02/28 以降このリポジトリから読み込めなくなるため、それまでに [SonicGarden/composite-actions/claude-review](https://github.com/SonicGarden/composite-actions/tree/main/claude-review) へ移行してください。
 
             **重要な制約:**
             - **削除された行（`-`）自体には直接コメントできない**（GitHub APIの制約）

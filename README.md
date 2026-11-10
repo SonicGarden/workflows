@@ -322,6 +322,13 @@ with:
 
 ### 7. claude-review
 
+**2027/02/28 以降、このリポジトリから読み込めなくなります**。それまでに [SonicGarden/composite-actions の claude-review](https://github.com/SonicGarden/composite-actions/tree/main/claude-review) へ移行してください。移行時の主な変更点:
+
+- `uses:` を job レベルから step レベル（`SonicGarden/composite-actions/claude-review@main`）に変更し、`runs-on`（`runs_on` input は廃止）/ `timeout-minutes` / `permissions` を呼び出し側の job に書く
+- `secrets:` の `claude_oauth_token` は `with:` の `claude_code_oauth_token` に、`anthropic_api_key` も `with:` で渡す
+- `minimum_changed_lines` は文字列（例: `'10'`）で渡す
+- `actions/checkout` は前置しない（アクション内で checkout する）
+
 <details>
 <summary>Claude Code を使用してPRの自動コードレビューを実行するワークフローです。</summary>
 
