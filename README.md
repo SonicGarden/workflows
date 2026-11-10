@@ -15,6 +15,17 @@ Reusable GitHub Actions workflows
 - [claude-review-cli](#10-claude-review-cli) - @aki77/claude-code-review CLIによるClaude Code自動コードレビュー
 - [pr-review-guide](#11-pr-review-guide) - PRのレビューガイドHTMLを生成しPR本文にリンクをupsert
 
+## べた書きへの移行
+
+1〜5のワークフローは **2027/02/28 以降、このリポジトリから読み込めなくなります**。それまでに、呼び出し側リポジトリに直接書く（べた書き）形へ移行し、`actions.lock` で依存 action を固定してください。各ワークフローの「べた書きへの移行」にテンプレートがあります。
+
+**actions.lock の作成手順:**
+1. `gh extension install github/gh-actions-lock`
+2. 対象リポジトリで `gh actions-lock` を実行する
+3. 生成された `.github/workflows/actions.lock` を、ワークフローと一緒にコミットする
+
+**注意:** `paths` フィルタ付きのワークフローを必須ステータスチェックにしている場合、対象外のPRではチェックが pending のまま止まります。必須チェックにはしないでください。
+
 ## 利用可能なワークフロー
 
 ### 1. copytuner_deploy
@@ -31,6 +42,38 @@ secrets:
 
 **必要なシークレット:**
 - `apiKey`: CopytunerのAPIキー
+
+**べた書きへの移行:**
+
+2027/02/28 までに、呼び出し側リポジトリに次のワークフローを置いてください。共通の手順と注意事項は[べた書きへの移行](#べた書きへの移行)を参照してください。
+
+```yaml
+name: copytuner_deploy
+
+on:
+  push:
+    branches: [main] # 既存の呼び出し側ワークフローのトリガーに合わせる
+
+jobs:
+  copytuner_deploy:
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Run deploy
+        env:
+          COPYTUNER_API_KEY: ${{ secrets.COPYTUNER_API_KEY }}
+        run: |
+          bin/rake copy_tuner:deploy
+```
 
 </details>
 
@@ -49,6 +92,38 @@ secrets:
 **オプションのシークレット:**
 - `rubygemsToken`: RubyGems.orgのAPIトークン（スコープ: `Index rubygems`）
 
+**べた書きへの移行:**
+
+2027/02/28 までに、呼び出し側リポジトリに次のワークフローを置いてください。共通の手順と注意事項は[べた書きへの移行](#べた書きへの移行)を参照してください。
+
+`kzkn/rubygems-changelog-url-action` にはタグがないため、`@main`（またはコミット SHA）での参照になります。Dependabot では更新されないので、必要に応じて手動で SHA を更新してください。
+
+```yaml
+name: gem_changelog
+
+on:
+  pull_request:
+    paths:
+      - Gemfile.lock
+
+jobs:
+  gem_changelog:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v7
+
+      - uses: kzkn/rubygems-changelog-url-action@e465910458be8fa448392318c1f6e4f70f3baef0
+        with:
+          githubToken: ${{ github.token }}
+          rubygemsToken: ${{ secrets.RUBYGEMS_TOKEN }} # オプション
+```
+
 </details>
 
 ### 3. new_gems
@@ -59,6 +134,37 @@ secrets:
 **使用方法:**
 ```yaml
 uses: SonicGarden/workflows/.github/workflows/new_gems.yml@main
+```
+
+**べた書きへの移行:**
+
+2027/02/28 までに、呼び出し側リポジトリに次のワークフローを置いてください。共通の手順と注意事項は[べた書きへの移行](#べた書きへの移行)を参照してください。
+
+```yaml
+name: new_gems
+
+on:
+  pull_request:
+    paths:
+      - Gemfile
+
+jobs:
+  new_gems:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+
+      - uses: aki77/new-gems-action@v2
+        with:
+          token: ${{ github.token }}
 ```
 
 </details>
@@ -78,6 +184,34 @@ with:
 **パラメータ:**
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
 
+**べた書きへの移行:**
+
+2027/02/28 までに、呼び出し側リポジトリに次のワークフローを置いてください。共通の手順と注意事項は[べた書きへの移行](#べた書きへの移行)を参照してください。
+
+```yaml
+name: new_npm
+
+on:
+  pull_request:
+    paths:
+      - package.json
+
+jobs:
+  new_npm:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hiwelo/new-dependencies-action@e4175e14484328f9ab56df91e420e90ad5031c08
+        with:
+          token: ${{ github.token }}
+```
+
 </details>
 
 ### 5. npm_changelog
@@ -96,6 +230,39 @@ with:
 **パラメータ:**
 - `lockPath`: ロックファイルのパス（デフォルト: `yarn.lock`）
 - `runs_on`: GitHub Actions runner の指定（デフォルト: `ubuntu-slim`）
+
+**べた書きへの移行:**
+
+2027/02/28 までに、呼び出し側リポジトリに次のワークフローを置いてください。共通の手順と注意事項は[べた書きへの移行](#べた書きへの移行)を参照してください。
+
+```yaml
+name: npm_changelog
+
+on:
+  pull_request:
+    paths:
+      - "**/yarn.lock"
+      - "**/package-lock.json"
+      - "**/pnpm-lock.yaml"
+
+jobs:
+  npm_changelog:
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v7
+
+      - uses: kzkn/npm-changelog-url-action@v2
+        with:
+          githubToken: ${{ github.token }}
+          lockPath: "yarn.lock" # ロックファイルのパスに合わせる
+          onlySpecifiedPackages: true
+```
 
 </details>
 

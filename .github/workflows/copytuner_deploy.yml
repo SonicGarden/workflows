@@ -13,6 +13,9 @@ jobs:
     timeout-minutes: 5
 
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行してください::copytuner_deploy は 2027/02/28 以降、このリポジトリから読み込めなくなります。それまでに呼び出し側リポジトリへべた書きし、actions.lock で依存 action を固定してください。手順は https://github.com/SonicGarden/workflows#1-copytuner_deploy を参照してください。"
+
       - uses: actions/checkout@v7
 
       - uses: ruby/setup-ruby@v1
