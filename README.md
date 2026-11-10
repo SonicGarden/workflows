@@ -414,6 +414,12 @@ jobs:
 
 ### 9. claude-dependabot-review
 
+**2027/02/28 以降、このリポジトリから読み込めなくなります**。それまでに [SonicGarden/composite-actions の claude-dependabot-review](https://github.com/SonicGarden/composite-actions/tree/main#claude-dependabot-review) へ移行してください。移行時の主な変更点:
+
+- `uses:` を job レベルから step レベル（`SonicGarden/composite-actions/claude-dependabot-review@main`）に変更し、`runs-on` / `timeout-minutes` / `permissions` を呼び出し側の job に書く
+- `secrets:` の `claude_oauth_token` は `with:` の `claude_code_oauth_token` に、`anthropic_api_key` も `with:` で渡す
+- `actions/checkout` は前置しない（アクション内で checkout する）
+
 <details>
 <summary>Dependabot の依存更新 PR について、CI（テスト）が緑でも見逃しがちな「ランタイム挙動の変化・deprecation」を CHANGELOG ベースで Claude に評価させ、PR へ要約コメントを 1 本残すワークフローです。検出/分類は Dependabot に、「壊れたか」は CI に任せ、本WFは「緑でも危ういもの」を拾う役に徹します。言語・フレームワークには依存しません。</summary>
 
