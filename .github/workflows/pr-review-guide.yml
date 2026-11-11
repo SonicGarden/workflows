@@ -112,6 +112,9 @@ jobs:
       pr_number: ${{ github.event.pull_request.number || github.event.issue.number }}
 
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行してください::pr-review-guide は 2027/02/28 以降、このリポジトリから読み込めなくなります。それまでに SonicGarden/composite-actions/pr-review-guide へ移行してください。手順は https://github.com/SonicGarden/composite-actions/tree/main/pr-review-guide を参照してください。"
+
       # issue_comment のデフォルト checkout は default branch なので、gh pr view で
       # head sha を明示解決して checkout に渡す。
       - name: Resolve PR info (issue_comment only)
