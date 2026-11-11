@@ -43,6 +43,9 @@ jobs:
       checks: read
 
     steps:
+      - name: Migration notice
+        run: echo "::warning title=移行してください::claude-review-cli は 2027/02/28 以降、このリポジトリから読み込めなくなります。それまでに SonicGarden/composite-actions/claude-review-cli へ移行してください。手順は https://github.com/SonicGarden/composite-actions/tree/main/claude-review-cli を参照してください。"
+
       - name: Resolve PR info (issue_comment only)
         id: pr
         if: github.event_name == 'issue_comment'

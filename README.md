@@ -489,6 +489,13 @@ jobs:
 
 ### 10. claude-review-cli
 
+**2027/02/28 以降、このリポジトリから読み込めなくなります**。それまでに [SonicGarden/composite-actions の claude-review-cli](https://github.com/SonicGarden/composite-actions/tree/main/claude-review-cli) へ移行してください。移行時の主な変更点:
+
+- `uses:` を job レベルから step レベル（`SonicGarden/composite-actions/claude-review-cli@main`）に変更し、`runs-on`（`runs_on` input は廃止）/ `timeout-minutes` / `permissions` / job の `if:` を呼び出し側の job に書く
+- `secrets:` の `claude_oauth_token` は `with:` の `claude_code_oauth_token` に、`anthropic_api_key` も `with:` で渡す
+- `/review` で起動できるのは OWNER / MEMBER / COLLABORATOR のコメントのみにする（呼び出し側の `if:` で制限する）
+- `actions/checkout` は前置しない（アクション内で checkout する）
+
 <details>
 <summary>`@aki77/claude-code-review` CLI を `npx` で実行してPRの自動コードレビューを行うワークフローです。GitHub MCPツールを直接呼び出す `claude-review` とは異なり、CLI が gh CLI 経由で diff を取得しレビューする方式です。`/review` PRコメントによる再実行、`reviewed-by-claude` ラベルでの二重レビュー防止を備えています。</summary>
 
