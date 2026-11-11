@@ -554,6 +554,13 @@ jobs:
 
 ### 11. pr-review-guide
 
+**2027/02/28 以降、このリポジトリから読み込めなくなります**。それまでに [SonicGarden/composite-actions の pr-review-guide](https://github.com/SonicGarden/composite-actions/tree/main/pr-review-guide) へ移行してください。移行時の主な変更点:
+
+- `uses:` を job レベルから step レベルに変更し、generate（`SonicGarden/composite-actions/pr-review-guide/generate@main`）と publish（`SonicGarden/composite-actions/pr-review-guide/publish@main`）の 2 ジョブを呼び出し側に書く。`runs-on`（`runs_on` input は廃止）/ `timeout-minutes` / `permissions` / job の `if:` も呼び出し側のジョブに書く
+- `permissions` はジョブごとに書く: generate は contents / pull-requests / issues すべて read、publish は contents: read と pull-requests / issues: write
+- `secrets:` の `claude_oauth_token` は `with:` の `claude_code_oauth_token` に、`anthropic_api_key` も `with:` で渡す
+- `actions/checkout` は前置しない（アクション内で checkout する）
+
 <details>
 <summary>PR ごとに「初見のレビュアー向け解説ページ（自己完結 HTML）」を Claude に生成させ、artifact の URL を PR 本文へ marker 方式で upsert するワークフローです。Claude を読み取り専用トークンで動かす `generate` ジョブと、書き込みを行う `publish` ジョブに分離しています。`/guide` PRコメントによる再生成、`review-guide-done` ラベルでの二重生成防止を備えています。</summary>
 
